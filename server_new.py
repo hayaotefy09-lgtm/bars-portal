@@ -7,6 +7,7 @@ import io
 import re
 import mimetypes
 import json
+import traceback
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from supabase import create_client, Client
@@ -26,7 +27,6 @@ SESSION_STORE = {}
 PASSWORD_MAP = {} # Virtual Auth Engine Fallback
 
 def load_local_auth():
-    """Virtual Auth Engine: Load local password fallback if database is missing fields."""
     global PASSWORD_MAP
     try:
         path = 'local_users.json'
@@ -70,7 +70,6 @@ def safe_fetch(table_names, fallback_data=[]):
     return fallback_data
 
 def init_cloud_seed():
-    """Developer Seeding: Ensures the main Admin account exists in Supabase."""
     print("[SEED]: Verifying Admin account...")
     try:
         admin_email = "admin@bars.ae"
@@ -84,12 +83,7 @@ def init_cloud_seed():
         if not found:
             print(f"[SEED]: Admin {admin_email} not found. Creating authoritative entry...")
             admin_data = {
-                "email": admin_email,
-                "full_name": "System Administrator",
-                "role": "ProgramStaff",
-                "password": "bars",
-                "bio": "System Root Account",
-                "interests": "Administration"
+                "email": admin_email, "full_name": "System Administrator", "role": "ProgramStaff", "password": "bars", "bio": "System Root Account", "interests": "Administration"
             }
             supabase_admin.table('users').insert(admin_data).execute()
             print("[SEED]: Admin account created successfully.")
@@ -100,7 +94,7 @@ def init_cloud_seed():
 
 @app.route('/api/initial-data', methods=['GET'])
 def initial_data():
-    return jsonify({"status": "Online", "v": "149.0 Resilience Master"})
+    return jsonify({"status": "Online", "v": "151.0 Upload Resilience"})
 
 @app.route('/api/dashboard', methods=['GET'])
 def handle_dashboard():
@@ -168,14 +162,10 @@ def handle_login():
                 r = supabase_admin.table(table).select('*').eq('email', e).execute()
                 if r.data:
                     db_pass = safe_get(r.data[0], ['password'])
-                    # Virtual Auth Engine Fallback
                     if not db_pass: db_pass = PASSWORD_MAP.get(e)
-                    
-                    if db_pass == p:
-                        resp = r; break
+                    if db_pass == p: resp = r; break
                     else: continue
             except: continue
-            
         if resp and resp.data:
             r = resp.data[0]
             fn = safe_get(r, ['full_name', 'name']) or f"{safe_get(r, ['first_name', 'firstName'], '')} {safe_get(r, ['last_name', 'lastName'], '')}".strip() or "User"
@@ -192,20 +182,17 @@ def admin_data():
     try:
         users = safe_fetch(['users', 'profiles', 'Registry', 'Staff'])
         pairs = safe_fetch(['mentor_mentee_pairs', 'mentormenteepair', 'MentorMenteePair', 'Pairings'])
-        
         users_map = {}
         for u in users:
             u['name'] = safe_get(u, ['full_name', 'name', 'displayName']) or f"{safe_get(u, ['first_name', 'firstName'], '')} {safe_get(u, ['last_name', 'lastName'], '')}".strip() or "Unnamed"
             u['role'] = normalize_role(safe_get(u, ['role', 'user_role']))
             users_map[u['email']] = u['name']
-            
         for p in pairs:
             m_email = safe_get(p, ['mentor_email', 'mentorEmail', 'mentor'])
             s_email = safe_get(p, ['mentee_email', 'menteeEmail', 'mentee'])
             p['mentor'] = users_map.get(m_email, m_email or "Unknown")
             p['mentee'] = users_map.get(s_email, s_email or "Unknown")
             p['pair_id'] = safe_get(p, ['id', 'pair_id'])
-            
         return jsonify({"users": users, "pairs": pairs, "profiles": users})
     except Exception as e: return jsonify({"error": str(e)}), 500
 
@@ -213,15 +200,13 @@ def admin_data():
 def admin_create():
     if request.headers.get('X-Admin-Bypass') != 'BARS2026': return jsonify({"error": "Unauthorized"}), 401
     try:
-        data = request.get_json()
-        email, fn, ln, role = data.get('email', '').lower().strip(), data.get('firstName', ''), data.get('lastName', ''), data.get('role', 'Mentee')
+        data = request.get_json(); email, fn, ln, role = data.get('email', '').lower().strip(), data.get('firstName', ''), data.get('lastName', ''), data.get('role', 'Mentee')
         full_name = f"{fn} {ln}".strip()
         supabase_admin.table('users').insert({"email": email, "full_name": full_name, "role": role, "password": "bars"}).execute()
         return jsonify({"success": True})
     except Exception as e: 
-        msg = str(e)
-        if "PGRST205" in msg: return jsonify({"error": "Missing Table: Please create 'users' table in Supabase."}), 400
-        return jsonify({"error": msg}), 500
+        if "PGRST205" in str(e): return jsonify({"error": "Missing Table: Please create 'users' table in Supabase."}), 400
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/admin/pair', methods=['POST'])
 def admin_pair():
@@ -229,19 +214,14 @@ def admin_pair():
     try:
         data = request.get_json(); m, s = data.get('mentor'), data.get('mentee')
         if not m or not s: return jsonify({"error": "Mentor and Mentee required"}), 400
-        
-        # Try primary table, then fallbacks
-        success = False
-        err_msg = ""
+        success = False; err_msg = ""
         for table in ['mentor_mentee_pairs', 'mentormenteepair', 'MentorMenteePair', 'Pairings']:
             try:
                 supabase_admin.table(table).insert({"mentor_email": m, "mentee_email": s}).execute()
                 success = True; break
             except Exception as e: err_msg = str(e); continue
-            
         if success: return jsonify({"success": True})
-        if "PGRST205" in err_msg:
-            return jsonify({"error": "MISSING_TABLE", "details": "Please create 'mentor_mentee_pairs' table in Supabase SQL Editor."}), 400
+        if "PGRST205" in err_msg: return jsonify({"error": "MISSING_TABLE", "details": "Please create 'mentor_mentee_pairs' table in Supabase SQL Editor."}), 400
         return jsonify({"error": err_msg}), 500
     except Exception as e: return jsonify({"error": str(e)}), 500
 
@@ -257,8 +237,7 @@ def admin_update_profile():
 @app.route('/api/register', methods=['POST'])
 def register():
     try:
-        data = request.get_json()
-        email, fn, ln, pw, role = data.get('email', '').lower().strip(), data.get('firstName', ''), data.get('lastName', ''), data.get('password', ''), data.get('role', 'Mentee')
+        data = request.get_json(); email, fn, ln, pw, role = data.get('email', '').lower().strip(), data.get('firstName', ''), data.get('lastName', ''), data.get('password', ''), data.get('role', 'Mentee')
         full_name = f"{fn} {ln}".strip()
         supabase_admin.table('users').insert({"email": email, "full_name": full_name, "password": pw, "role": role, "bio": "", "interests": ""}).execute()
         return jsonify({"status": "success", "message": "Account created! You can now log in."}), 200
@@ -274,9 +253,7 @@ def handle_verify_staff():
             if r.data: resp = r; break
         except: continue
     if resp and resp.data:
-        r = resp.data[0]
-        # Allow default password to be considered "activated" for BARS parity
-        db_pass = safe_get(r, ['password']) or PASSWORD_MAP.get(e)
+        r = resp.data[0]; db_pass = safe_get(r, ['password']) or PASSWORD_MAP.get(e)
         is_active = db_pass is not None and db_pass.strip() not in ['PENDING_ACTIVATION', '']
         return jsonify({"success": True, "full_name": safe_get(r, ['full_name', 'name']), "is_activated": is_active})
     return jsonify({"error": "Staff not found"}), 404
@@ -285,10 +262,8 @@ def handle_verify_staff():
 def handle_activate_staff():
     try:
         data = request.get_json(); e, p = data.get('email', '').lower().strip(), data.get('password', '')
-        # Try updating all potential user tables
         for table in ['users', 'profiles', 'Registry', 'Staff']:
-            try:
-                supabase_admin.table(table).update({"password": p}).eq('email', e).execute()
+            try: supabase_admin.table(table).update({"password": p}).eq('email', e).execute()
             except: continue
         return jsonify({"success": True})
     except Exception as e: return jsonify({"error": str(e)}), 500
@@ -299,8 +274,7 @@ def handle_messages():
     if not u: return jsonify({"error": "Auth Required"}), 401
     try:
         if request.method == 'GET':
-            pid = request.args.get('pair_id')
-            q = None
+            pid = request.args.get('pair_id'); q = None
             for table in ['messages', 'Messages', 'Chats']:
                 try:
                     q = supabase_admin.table(table).select('*')
@@ -311,8 +285,7 @@ def handle_messages():
                 except: continue
             return jsonify([]) 
         else:
-            data = request.get_json(); pid, msg = data.get('pair_id'), data.get('message')
-            ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+            data = request.get_json(); pid, msg = data.get('pair_id'), data.get('message'); ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
             supabase_admin.table('messages').insert({"pair_id": pid, "sender_email": u['email'], "message": msg, "timestamp": ts}).execute()
             return jsonify({"success": True})
     except Exception as e: return jsonify({"error": str(e)}), 500
@@ -324,27 +297,19 @@ def handle_whiteboard():
     try:
         role = normalize_role(u['role'])
         if request.method == 'GET':
-            # Whiteboard Privacy Protocol: Role-based filtering
             for table in ['whiteboard', 'Whiteboard', 'Notes']:
                 try:
                     query = supabase_admin.table(table).select('*')
-                    # If Mentor: Only see own notes
-                    if role == 'Mentor':
-                        query = query.eq('mentor_email', u['email'])
-                    # If counselor: see all (Master View)
+                    if role == 'Mentor': query = query.eq('mentor_email', u['email'])
                     resp = query.order('created_at', desc=True).execute()
                     if resp.data is not None: return jsonify(resp.data)
                 except: continue
             return jsonify([])
         else:
-            # Whiteboard Privacy Protocol: POST check
             if role != 'Mentor' and role != 'ProgramStaff': return jsonify({"error": "Unauthorized"}), 403
             data = request.get_json(); note = data.get('note')
             supabase_admin.table('whiteboard').insert({
-                "mentor_name": u['name'],
-                "mentor_email": u['email'],
-                "note": note,
-                "created_at": datetime.datetime.now().isoformat()
+                "mentor_name": u['name'], "mentor_email": u['email'], "note": note, "created_at": datetime.datetime.now().isoformat()
             }).execute()
             return jsonify({"success": True})
     except Exception as e: return jsonify({"error": str(e)}), 500
@@ -364,62 +329,53 @@ def handle_upload_resource_file():
     u = get_user_from_headers()
     if not u: return jsonify({"error": "Auth Required"}), 401
     try:
-        # Resource Upload Fix: Binary Parity via Manual Multipart Parser
+        # Robust Binary Parser (v151.0): Precision splitting without rstrip on bytes
         raw_body = request.get_data(); ct = request.headers.get('Content-Type', '')
-        if "boundary=" not in ct: return jsonify({"error": "Invalid Multipart Request"}), 400
+        if "boundary=" not in ct: return jsonify({"error": "Invalid Request"}), 400
         boundary = b'--' + ct.split("boundary=")[1].encode()
         parts = raw_body.split(boundary); form = {}
         for p in parts:
             if b'Content-Disposition' not in p: continue
             head_end = p.find(b'\r\n\r\n'); head = p[:head_end].decode('utf-8', errors='ignore')
-            body = p[head_end+4:].rstrip(b'\r\n--').rstrip(b'\r\n')
+            # Extract content precisely using the slice, avoiding rstrip that corrupts binary files
+            body = p[head_end+4:]
+            if body.endswith(b'\r\n'): body = body[:-2]
+            
             name_match = re.search(r'name="([^"]+)"', head); file_match = re.search(r'filename="([^"]+)"', head)
             if name_match:
                 n = name_match.group(1)
                 if file_match: form[n] = {'filename': file_match.group(1), 'content': body}
                 else: form[n] = body.decode('utf-8', errors='ignore')
-        if 'file' not in form: return jsonify({"error": "No file part"}), 400
+        
+        if 'file' not in form: return jsonify({"error": "File missing"}), 400
         file_item = form['file']; fn = f"{uuid.uuid4()}_{file_item['filename']}"
         mime, _ = mimetypes.guess_type(file_item['filename'])
         
-        # Bucket Sync: resource-files is the authoritative bucket
         supabase_admin.storage.from_('resource-files').upload(path=fn, file=file_item['content'], file_options={"content-type": mime or 'application/octet-stream'})
         url = supabase_admin.storage.from_('resource-files').get_public_url(fn)
         
-        # Insert into Library/Resources with Adaptive Schema
         res_data = {
-            "id": str(uuid.uuid4())[:8], 
-            "name": form.get('name', file_item['filename']), 
-            "type": form.get('type', 'Document'), 
-            "uploaded_by": u['email'], 
-            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), 
-            "description": form.get('description', ''), 
-            "category": form.get('category', 'General'), 
-            "url": url
+            "id": str(uuid.uuid4())[:8], "name": form.get('name', file_item['filename']), "type": form.get('type', 'Document'), "uploaded_by": u['email'], 
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), "description": form.get('description', ''), "category": form.get('category', 'General'), "url": url
         }
         for table in ['resources', 'Resources', 'Library']:
-            try:
-                supabase_admin.table(table).insert(res_data).execute()
-                break
+            try: supabase_admin.table(table).insert(res_data).execute(); break
             except: continue
-            
         return jsonify({"success": True, "url": url})
-    except Exception as e: return jsonify({"error": str(e)}), 500
+    except Exception as e: 
+        print(f"[UPLOAD ERROR]: {traceback.format_exc()}")
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
 @app.route('/api/resources/delete', methods=['POST'])
 def handle_resource_delete():
-    # Trash Button: Adaptive Deletion Logic
     u = get_user_from_headers()
     if not u: return jsonify({"error": "Auth Required"}), 401
     try:
-        data = request.get_json()
-        rid = data.get('resource_id') or data.get('id')
+        data = request.get_json(); rid = data.get('resource_id') or data.get('id')
         if not rid: return jsonify({"error": "ID required"}), 400
-        
         success = False
         for table in ['resources', 'Resources', 'Library']:
             try:
-                # Try as string, then as int
                 try: supabase_admin.table(table).delete().eq('id', rid).execute(); success = True; break
                 except: supabase_admin.table(table).delete().eq('id', int(rid)).execute(); success = True; break
             except: continue
@@ -447,8 +403,7 @@ def handle_delete_user():
     try:
         data = request.get_json(); email = data.get('email')
         for table in ['users', 'profiles', 'Registry', 'Staff']:
-            try:
-                supabase_admin.table(table).delete().eq('email', email).execute()
+            try: supabase_admin.table(table).delete().eq('email', email).execute()
             except: continue
         return jsonify({"success": True})
     except Exception as e: return jsonify({"error": str(e)}), 500
@@ -461,7 +416,6 @@ def serve_admin(): return send_from_directory('.', 'admin.html')
 def serve_static(path): return send_from_directory('.', path)
 
 if __name__ == "__main__":
-    load_local_auth()
-    init_cloud_seed()
+    load_local_auth(); init_cloud_seed()
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port)
