@@ -94,7 +94,7 @@ def init_cloud_seed():
 
 @app.route('/api/initial-data', methods=['GET'])
 def initial_data():
-    return jsonify({"status": "Online", "v": "155.0 Survey Logic Master"})
+    return jsonify({"status": "Online", "v": "156.0 Resilience Master"})
 
 @app.route('/api/dashboard', methods=['GET'])
 def handle_dashboard():
@@ -149,7 +149,6 @@ def handle_dashboard():
         fn_u, f_u, l_u = format_user_name(u)
         is_c = normalize_role(u.get('role')) == 'ProgramStaff'
         
-        # BARS Survey Configuration Logic
         gender = str(safe_get(u, ['Gender', 'gender'], '')).replace("'", "").strip()
         survey_links = {
             "mentee_pre": "survey_mentee_pre2.csv",
@@ -340,18 +339,12 @@ def handle_survey_submit():
     try:
         data = request.get_json()
         payload = {
-            "user_email": u['email'],
-            "user_name": u['name'],
-            "role": u['role'],
-            "timestamp": datetime.datetime.now().isoformat(),
-            "responses": json.dumps(data.get('responses', {})),
-            "survey_type": data.get('survey_type', 'General')
+            "user_email": u['email'], "user_name": u['name'], "role": u['role'], "timestamp": datetime.datetime.now().isoformat(),
+            "responses": json.dumps(data.get('responses', {})), "survey_type": data.get('survey_type', 'General')
         }
-        # BARS Requirement: Save to survey_responses_bars
         supabase_admin.table('survey_responses_bars').insert(payload).execute()
         return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception as e: return jsonify({"error": str(e)}), 500
 
 @app.route('/api/resources/upload', methods=['POST'])
 @app.route('/api/resources/upload-file', methods=['POST'])
@@ -359,12 +352,18 @@ def handle_upload_resource_file():
     u = get_user_from_headers()
     if not u: return jsonify({"error": "Auth Required"}), 401
     try:
+        print("[UPLOAD]: Starting manual parse...")
         raw_body = request.get_data(); ct = request.headers.get('Content-Type', '')
-        if "boundary=" not in ct: return jsonify({"error": "Missing Boundary"}), 400
+        if "boundary=" not in ct: 
+            print("[UPLOAD ERROR]: Missing boundary in Content-Type")
+            return jsonify({"error": "Missing Boundary"}), 400
+        
         boundary_str = ct.split("boundary=")[1].strip()
         boundary = b'--' + boundary_str.encode()
+        print(f"[UPLOAD]: Boundary identified: {boundary_str}")
         
         parts = raw_body.split(boundary)
+        print(f"[UPLOAD]: Body split into {len(parts)} parts.")
         form = {}
         for p in parts:
             if not p or b'Content-Disposition' not in p: continue
@@ -373,9 +372,11 @@ def handle_upload_resource_file():
                 if head_end == -1: continue
                 head = p[:head_end].decode('utf-8', errors='ignore')
                 body = p[head_end+4:]
-                if body.endswith(b'\r\n'): body = body[:-2]
-                if body.endswith(b'--'): body = body[:-2]
-
+                
+                # Precise trimming of trailing multipart separators
+                if body.endswith(b'\r\n--'): body = body[:-4]
+                elif body.endswith(b'\r\n'): body = body[:-2]
+                
                 name_match = re.search(r'name="([^"]+)"', head)
                 file_match = re.search(r'filename="([^"]+)"', head)
                 
@@ -388,18 +389,27 @@ def handle_upload_resource_file():
                         sanitized = re.sub(r'[^a-zA-Z0-9]', '_', base)
                         unique_fn = f"{uuid.uuid4()}_{sanitized}{ext}"
                         form[n] = {'filename': unique_fn, 'content': body, 'orig_name': fn_orig}
+                        print(f"[UPLOAD]: Found file '{fn_orig}' -> '{unique_fn}' ({len(body)} bytes)")
                     else: 
                         form[n] = body.decode('utf-8', errors='ignore').strip()
-            except: continue
+                        print(f"[UPLOAD]: Found field '{n}' = '{form[n]}'")
+            except Exception as e: 
+                print(f"[UPLOAD PART ERROR]: {str(e)}")
+                continue
         
-        if 'file' not in form: return jsonify({"error": "No file found in stream"}), 400
+        if 'file' not in form: 
+            print("[UPLOAD ERROR]: No 'file' key in form data.")
+            return jsonify({"error": "No file found in stream"}), 400
         
         f = form['file']; mime, _ = mimetypes.guess_type(f['filename'])
+        print(f"[UPLOAD]: Uploading to Supabase bucket 'resource-files'...")
         supabase_admin.storage.from_('resource-files').upload(path=f['filename'], file=f['content'], file_options={"content-type": mime or 'application/octet-stream'})
+        
         url = supabase_admin.storage.from_('resource-files').get_public_url(f['filename'])
+        print(f"[UPLOAD]: Public URL: {url}")
         
         res_data = {
-            "id": str(uuid.uuid4())[:8], "name": form.get('name', f['orig_name']), "type": form.get('type', 'Document'), "uploaded_by": u['email'], 
+            "id": str(uuid.uuid4())[:8], "name": form.get('item_name') or form.get('name') or f['orig_name'], "type": form.get('type', 'Document'), "uploaded_by": u['email'], 
             "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), "description": form.get('description', ''), "category": form.get('category', 'General'), "url": url
         }
         
@@ -407,10 +417,16 @@ def handle_upload_resource_file():
         for table in ['resources', 'Resources', 'Library']:
             try:
                 supabase_admin.table(table).insert(res_data).execute()
+                print(f"[UPLOAD]: Saved to table '{table}'")
                 success = True; break
-            except: continue
+            except Exception as e: 
+                print(f"[UPLOAD TABLE ERROR] {table}: {str(e)}")
+                continue
+        
+        if not success: return jsonify({"error": "Database link failed."}), 400
         return jsonify({"success": True, "url": url})
     except Exception as e: 
+        print(f"[UPLOAD MASTER ERROR]: {str(e)}")
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
 @app.route('/api/resources/delete', methods=['POST'])
