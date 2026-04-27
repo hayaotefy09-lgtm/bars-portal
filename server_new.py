@@ -83,7 +83,7 @@ def init_cloud_seed():
 
 @app.route('/api/initial-data', methods=['GET'])
 def initial_data():
-    return jsonify({"status": "Online", "v": "146.0 Resilience Master"})
+    return jsonify({"status": "Online", "v": "147.0 Admin Schema Recovery"})
 
 @app.route('/api/dashboard', methods=['GET'])
 def handle_dashboard():
@@ -182,15 +182,31 @@ def admin_create():
         full_name = f"{fn} {ln}".strip()
         supabase_admin.table('users').insert({"email": email, "full_name": full_name, "role": role, "password": "bars"}).execute()
         return jsonify({"success": True})
-    except Exception as e: return jsonify({"error": str(e)}), 500
+    except Exception as e: 
+        msg = str(e)
+        if "PGRST205" in msg: return jsonify({"error": "Missing Table: Please create 'users' table in Supabase."}), 400
+        return jsonify({"error": msg}), 500
 
 @app.route('/api/admin/pair', methods=['POST'])
 def admin_pair():
     if request.headers.get('X-Admin-Bypass') != 'BARS2026': return jsonify({"error": "Unauthorized"}), 401
     try:
         data = request.get_json(); m, s = data.get('mentor'), data.get('mentee')
-        supabase_admin.table('mentor_mentee_pairs').insert({"mentor_email": m, "mentee_email": s}).execute()
-        return jsonify({"success": True})
+        if not m or not s: return jsonify({"error": "Mentor and Mentee required"}), 400
+        
+        # Try primary table, then fallbacks
+        success = False
+        err_msg = ""
+        for table in ['mentor_mentee_pairs', 'mentormenteepair', 'MentorMenteePair', 'Pairings']:
+            try:
+                supabase_admin.table(table).insert({"mentor_email": m, "mentee_email": s}).execute()
+                success = True; break
+            except Exception as e: err_msg = str(e); continue
+            
+        if success: return jsonify({"success": True})
+        if "PGRST205" in err_msg:
+            return jsonify({"error": "MISSING_TABLE", "details": "Please create 'mentor_mentee_pairs' table in Supabase SQL Editor."}), 400
+        return jsonify({"error": err_msg}), 500
     except Exception as e: return jsonify({"error": str(e)}), 500
 
 @app.route('/api/admin/update-profile', methods=['POST'])
