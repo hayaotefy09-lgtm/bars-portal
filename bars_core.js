@@ -595,7 +595,7 @@ function renderDashboardUI(data) {
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:2px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                                     Chat
                                </button>
-                               <button class="btn-white" onclick="window.showPage('${p.type === 'Mentor' ? 'sessions' : 'dashboard'}')" style="font-weight:700; background:white; color:#D4AF37; border: 1.5px solid rgba(212, 175, 55, 0.15);">
+                               <button class="btn-white" onclick="window.setScheduleTarget('${p.name}', '${p.pair_id}'); window.showPage('sessions');" style="font-weight:700; background:white; color:#D4AF37; border: 1.5px solid rgba(212, 175, 55, 0.15);">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:2px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                                     Sessions
                                </button>
@@ -1092,39 +1092,66 @@ window.addEventListener('load', () => {
 });
 
 // Bindings
-window.openScheduleModal = (n, p) => {
+window.openScheduleModal = (name, pairId) => {
     document.getElementById('schedule-modal-overlay').style.display = 'flex';
+    window.SELECTED_PAIR_ID = pairId;
+    window.SELECTED_PARTNER_NAME = name;
+
     const modalNameEl = document.getElementById('selected-partner-name');
     if (modalNameEl) {
-        modalNameEl.textContent = n;
-        modalNameEl.style.display = 'block'; // Ensure visibility
+        modalNameEl.textContent = name || "Partner";
+        modalNameEl.style.display = 'block';
     }
-    const initial = n.charAt(0).toUpperCase();
-    if (avatarEl) {
-        avatarEl.textContent = initial;
+    
+    const avatarEl = document.getElementById('selected-partner-avatar');
+    if (avatarEl && name) {
+        avatarEl.textContent = name.charAt(0).toUpperCase();
         avatarEl.style.background = '#000000';
         avatarEl.style.color = '#ffffff';
     }
-    window.SELECTED_PAIR_ID = p;
+
+    const now = new Date();
+    window.CURRENT_MONTH = now.getMonth();
+    window.CURRENT_YEAR = now.getFullYear();
+    
     window.updateCalendar();
-
-    // Privacy: Default to Mentee Only for Counselor sessions
-    const user = BarsSession.get()?.user;
-    const isCounselor = !!user?.isCounselor || user?.role === 'ProgramStaff';
-
-
     window.switchScheduleStep(1);
 };
-window.closeScheduleModal = () => document.getElementById('schedule-modal-overlay').style.display = 'none';
-window.switchScheduleStep = (s) => { document.getElementById('schedule-step-1').style.display = (s === 1 ? 'block' : 'none'); document.getElementById('schedule-step-2').style.display = (s === 2 ? 'block' : 'none'); };
+
+window.changeMonth = (delta) => {
+    window.CURRENT_MONTH += delta;
+    if (window.CURRENT_MONTH < 0) {
+        window.CURRENT_MONTH = 11;
+        window.CURRENT_YEAR--;
+    } else if (window.CURRENT_MONTH > 11) {
+        window.CURRENT_MONTH = 0;
+        window.CURRENT_YEAR++;
+    }
+    window.updateCalendar();
+};
+
 window.updateCalendar = () => {
     const cont = document.getElementById('calendar-grid-container');
-    if (!cont) return;
+    const title = document.getElementById('calendar-month-year');
+    if (!cont || !title) return;
+
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    title.textContent = `${monthNames[window.CURRENT_MONTH]} ${window.CURRENT_YEAR}`;
+
     cont.innerHTML = '';
-    // Fix alignment: Start with correct spacing for April 2026 (starts on Wednesday = 3 empty slots)
-    // For simplicity in this project, we just ensure the grid is centered and has 31 days
-    for (let i = 0; i < 3; i++) { const space = document.createElement('div'); cont.appendChild(space); }
-    for (let d = 1; d <= 31; d++) {
+    const firstDay = new Date(window.CURRENT_YEAR, window.CURRENT_MONTH, 1).getDay();
+    const daysInMonth = new Date(window.CURRENT_YEAR, window.CURRENT_MONTH + 1, 0).getDate();
+
+    // Spacing for start of month
+    for (let i = 0; i < firstDay; i++) {
+        const space = document.createElement('div');
+        cont.appendChild(space);
+    }
+
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    for (let d = 1; d <= daysInMonth; d++) {
         const div = document.createElement('div');
         div.className = 'calendar-day';
         div.style.width = '32px';
@@ -1138,15 +1165,39 @@ window.updateCalendar = () => {
         div.style.cursor = 'pointer';
         div.style.margin = '2px';
         div.textContent = d;
-        div.onclick = () => {
-            document.querySelectorAll('.calendar-day').forEach(el => el.classList.remove('active'));
-            div.classList.add('active');
-            window.SELECTED_DATE = `2026-04-${d.toString().padStart(2, '0')}`;
-            window.switchScheduleStep(2);
-            const dateStr = new Date(2026, 3, d).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-            document.getElementById('selected-date-display').textContent = dateStr;
-        };
+
+        const thisDate = new Date(window.CURRENT_YEAR, window.CURRENT_MONTH, d);
+        if (thisDate < today) {
+            div.style.opacity = '0.3';
+            div.style.cursor = 'not-allowed';
+        } else {
+            div.onclick = () => {
+                document.querySelectorAll('.calendar-day').forEach(el => el.classList.remove('active'));
+                div.classList.add('active');
+                window.SELECTED_DATE = `${window.CURRENT_YEAR}-${(window.CURRENT_MONTH + 1).toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
+                window.switchScheduleStep(2);
+                const dateStr = thisDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+                document.getElementById('selected-date-display').textContent = dateStr;
+            };
+        }
         cont.appendChild(div);
+    }
+};
+
+window.closeScheduleModal = () => document.getElementById('schedule-modal-overlay').style.display = 'none';
+window.switchScheduleStep = (s) => { 
+    const s1 = document.getElementById('schedule-step-1');
+    const s2 = document.getElementById('schedule-step-2');
+    if (s1) s1.style.display = (s === 1 ? 'block' : 'none'); 
+    if (s2) s2.style.display = (s === 2 ? 'block' : 'none'); 
+};
+
+window.setScheduleTarget = (name, pairId) => {
+    window.SELECTED_SCHEDULE_NAME = name;
+    window.SELECTED_SCHEDULE_PAIR_ID = pairId;
+    const masterBtn = document.getElementById('master-schedule-btn');
+    if (masterBtn) {
+        masterBtn.setAttribute('onclick', `window.openScheduleModal('${name}', '${pairId}')`);
     }
 };
 window.submitSchedule = async () => {
