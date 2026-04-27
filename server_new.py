@@ -94,7 +94,7 @@ def init_cloud_seed():
 
 @app.route('/api/initial-data', methods=['GET'])
 def initial_data():
-    return jsonify({"status": "Online", "v": "154.0 Resilience Final Seal"})
+    return jsonify({"status": "Online", "v": "155.0 Survey Logic Master"})
 
 @app.route('/api/dashboard', methods=['GET'])
 def handle_dashboard():
@@ -148,7 +148,17 @@ def handle_dashboard():
         res["messages"] = messages_data 
         fn_u, f_u, l_u = format_user_name(u)
         is_c = normalize_role(u.get('role')) == 'ProgramStaff'
-        res["profile"] = {"name": fn_u, "first_name": f_u, "last_name": l_u, "email": u.get('email'), "role": u['role'], "isCounselor": is_c}
+        
+        # BARS Survey Configuration Logic
+        gender = str(safe_get(u, ['Gender', 'gender'], '')).replace("'", "").strip()
+        survey_links = {
+            "mentee_pre": "survey_mentee_pre2.csv",
+            "mentee_post": "survey_mentee_post2.csv" if gender == "Boy" else "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw9QMQpAEwXBPk9Yk-mW8Ba1UMTZXWjZIRE9ET1pWN05QVzcyUjhPSTZCRS4u",
+            "mentor_post": "survey_mentor_post2.csv",
+            "mentor_during": "survey_mentor_during2.csv"
+        }
+        
+        res["profile"] = {"name": fn_u, "first_name": f_u, "last_name": l_u, "email": u.get('email'), "role": u['role'], "isCounselor": is_c, "gender": gender, "surveys": survey_links}
         return jsonify(res)
     except Exception as e: return jsonify({"error": f"Dashboard Error: {str(e)}"}), 500
 
@@ -170,7 +180,7 @@ def handle_login():
             r = resp.data[0]
             fn = safe_get(r, ['full_name', 'name']) or f"{safe_get(r, ['first_name', 'firstName'], '')} {safe_get(r, ['last_name', 'lastName'], '')}".strip() or "User"
             parts = fn.split(' ', 1); f_name = parts[0] if len(parts) > 0 else fn; l_name = parts[1] if len(parts) > 1 else ""
-            user = {"email": e, "role": safe_get(r, ['role', 'user_role']), "name": fn, "first_name": f_name, "last_name": l_name, "isCounselor": (normalize_role(safe_get(r, ['role'])) == 'ProgramStaff')}
+            user = {"email": e, "role": safe_get(r, ['role', 'user_role']), "name": fn, "first_name": f_name, "last_name": l_name, "isCounselor": (normalize_role(safe_get(r, ['role'])) == 'ProgramStaff'), "Gender": safe_get(r, ['Gender', 'gender'])}
             token = str(uuid.uuid4()); SESSION_STORE[token] = user
             return jsonify({"success": True, "token": token, "user": user})
         return jsonify({"error": "Invalid credentials"}), 401
@@ -323,13 +333,32 @@ def handle_survey_analytics():
         return jsonify({"surveys": resp.data or [], "trends": [{"survey": "Brotherhood", "score": 85}]})
     except: return jsonify({"surveys": []}), 200
 
+@app.route('/api/survey/submit', methods=['POST'])
+def handle_survey_submit():
+    u = get_user_from_headers()
+    if not u: return jsonify({"error": "Auth Required"}), 401
+    try:
+        data = request.get_json()
+        payload = {
+            "user_email": u['email'],
+            "user_name": u['name'],
+            "role": u['role'],
+            "timestamp": datetime.datetime.now().isoformat(),
+            "responses": json.dumps(data.get('responses', {})),
+            "survey_type": data.get('survey_type', 'General')
+        }
+        # BARS Requirement: Save to survey_responses_bars
+        supabase_admin.table('survey_responses_bars').insert(payload).execute()
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/resources/upload', methods=['POST'])
 @app.route('/api/resources/upload-file', methods=['POST'])
 def handle_upload_resource_file():
     u = get_user_from_headers()
     if not u: return jsonify({"error": "Auth Required"}), 401
     try:
-        # BARS Resilience Final Seal (v154.0): Precise Multipart Stream Extraction
         raw_body = request.get_data(); ct = request.headers.get('Content-Type', '')
         if "boundary=" not in ct: return jsonify({"error": "Missing Boundary"}), 400
         boundary_str = ct.split("boundary=")[1].strip()
@@ -339,15 +368,13 @@ def handle_upload_resource_file():
         form = {}
         for p in parts:
             if not p or b'Content-Disposition' not in p: continue
-            # Standard RFC Splitting: Headers end at \r\n\r\n
             try:
                 head_end = p.find(b'\r\n\r\n')
                 if head_end == -1: continue
                 head = p[:head_end].decode('utf-8', errors='ignore')
-                # Content starts exactly after \r\n\r\n and ends before the next boundary's \r\n
                 body = p[head_end+4:]
                 if body.endswith(b'\r\n'): body = body[:-2]
-                if body.endswith(b'--'): body = body[:-2] # Last boundary handle
+                if body.endswith(b'--'): body = body[:-2]
 
                 name_match = re.search(r'name="([^"]+)"', head)
                 file_match = re.search(r'filename="([^"]+)"', head)
@@ -356,7 +383,6 @@ def handle_upload_resource_file():
                     n = name_match.group(1)
                     if file_match: 
                         fn_orig = file_match.group(1)
-                        # Key Sanitization: URL-Safe Slugification
                         ext = os.path.splitext(fn_orig)[1]
                         base = os.path.splitext(fn_orig)[0]
                         sanitized = re.sub(r'[^a-zA-Z0-9]', '_', base)
@@ -369,32 +395,20 @@ def handle_upload_resource_file():
         if 'file' not in form: return jsonify({"error": "No file found in stream"}), 400
         
         f = form['file']; mime, _ = mimetypes.guess_type(f['filename'])
-        # Bulletproof Storage: Push clean binary stream
         supabase_admin.storage.from_('resource-files').upload(path=f['filename'], file=f['content'], file_options={"content-type": mime or 'application/octet-stream'})
-        
-        # Verify and Map: Immediately retrieve the public URL
         url = supabase_admin.storage.from_('resource-files').get_public_url(f['filename'])
         
         res_data = {
-            "id": str(uuid.uuid4())[:8], 
-            "name": form.get('name', f['orig_name']), 
-            "type": form.get('type', 'Document'), 
-            "uploaded_by": u['email'], 
-            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), 
-            "description": form.get('description', ''), 
-            "category": form.get('category', 'General'), 
-            "url": url
+            "id": str(uuid.uuid4())[:8], "name": form.get('name', f['orig_name']), "type": form.get('type', 'Document'), "uploaded_by": u['email'], 
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), "description": form.get('description', ''), "category": form.get('category', 'General'), "url": url
         }
         
-        # Adaptive Schema Fallback: Try all potential tables
         success = False
         for table in ['resources', 'Resources', 'Library']:
             try:
                 supabase_admin.table(table).insert(res_data).execute()
                 success = True; break
             except: continue
-            
-        if not success: return jsonify({"error": "Database link failed. Please verify 'resources' table schema."}), 400
         return jsonify({"success": True, "url": url})
     except Exception as e: 
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
