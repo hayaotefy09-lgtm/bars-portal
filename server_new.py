@@ -94,7 +94,7 @@ def init_cloud_seed():
 
 @app.route('/api/initial-data', methods=['GET'])
 def initial_data():
-    return jsonify({"status": "Online", "v": "152.0 Key Sanitization Master"})
+    return jsonify({"status": "Online", "v": "154.0 Resilience Final Seal"})
 
 @app.route('/api/dashboard', methods=['GET'])
 def handle_dashboard():
@@ -329,42 +329,72 @@ def handle_upload_resource_file():
     u = get_user_from_headers()
     if not u: return jsonify({"error": "Auth Required"}), 401
     try:
+        # BARS Resilience Final Seal (v154.0): Precise Multipart Stream Extraction
         raw_body = request.get_data(); ct = request.headers.get('Content-Type', '')
-        if "boundary=" not in ct: return jsonify({"error": "Invalid Request"}), 400
-        boundary = b'--' + ct.split("boundary=")[1].encode()
-        parts = raw_body.split(boundary); form = {}
+        if "boundary=" not in ct: return jsonify({"error": "Missing Boundary"}), 400
+        boundary_str = ct.split("boundary=")[1].strip()
+        boundary = b'--' + boundary_str.encode()
+        
+        parts = raw_body.split(boundary)
+        form = {}
         for p in parts:
-            if b'Content-Disposition' not in p: continue
-            head_end = p.find(b'\r\n\r\n'); head = p[:head_end].decode('utf-8', errors='ignore')
-            body = p[head_end+4:]
-            if body.endswith(b'\r\n'): body = body[:-2]
-            name_match = re.search(r'name="([^"]+)"', head); file_match = re.search(r'filename="([^"]+)"', head)
-            if name_match:
-                n = name_match.group(1)
-                if file_match: form[n] = {'filename': file_match.group(1), 'content': body}
-                else: form[n] = body.decode('utf-8', errors='ignore')
+            if not p or b'Content-Disposition' not in p: continue
+            # Standard RFC Splitting: Headers end at \r\n\r\n
+            try:
+                head_end = p.find(b'\r\n\r\n')
+                if head_end == -1: continue
+                head = p[:head_end].decode('utf-8', errors='ignore')
+                # Content starts exactly after \r\n\r\n and ends before the next boundary's \r\n
+                body = p[head_end+4:]
+                if body.endswith(b'\r\n'): body = body[:-2]
+                if body.endswith(b'--'): body = body[:-2] # Last boundary handle
+
+                name_match = re.search(r'name="([^"]+)"', head)
+                file_match = re.search(r'filename="([^"]+)"', head)
+                
+                if name_match:
+                    n = name_match.group(1)
+                    if file_match: 
+                        fn_orig = file_match.group(1)
+                        # Key Sanitization: URL-Safe Slugification
+                        ext = os.path.splitext(fn_orig)[1]
+                        base = os.path.splitext(fn_orig)[0]
+                        sanitized = re.sub(r'[^a-zA-Z0-9]', '_', base)
+                        unique_fn = f"{uuid.uuid4()}_{sanitized}{ext}"
+                        form[n] = {'filename': unique_fn, 'content': body, 'orig_name': fn_orig}
+                    else: 
+                        form[n] = body.decode('utf-8', errors='ignore').strip()
+            except: continue
         
-        if 'file' not in form: return jsonify({"error": "File missing"}), 400
-        file_item = form['file']
+        if 'file' not in form: return jsonify({"error": "No file found in stream"}), 400
         
-        # Key Sanitization (v152.0): Replace non-alphanumeric chars with underscores
-        raw_fn = file_item['filename']
-        ext = os.path.splitext(raw_fn)[1]
-        base = os.path.splitext(raw_fn)[0]
-        sanitized_base = re.sub(r'[^a-zA-Z0-9]', '_', base)
-        fn = f"{uuid.uuid4()}_{sanitized_base}{ext}"
+        f = form['file']; mime, _ = mimetypes.guess_type(f['filename'])
+        # Bulletproof Storage: Push clean binary stream
+        supabase_admin.storage.from_('resource-files').upload(path=f['filename'], file=f['content'], file_options={"content-type": mime or 'application/octet-stream'})
         
-        mime, _ = mimetypes.guess_type(fn)
-        supabase_admin.storage.from_('resource-files').upload(path=fn, file=file_item['content'], file_options={"content-type": mime or 'application/octet-stream'})
-        url = supabase_admin.storage.from_('resource-files').get_public_url(fn)
+        # Verify and Map: Immediately retrieve the public URL
+        url = supabase_admin.storage.from_('resource-files').get_public_url(f['filename'])
         
         res_data = {
-            "id": str(uuid.uuid4())[:8], "name": form.get('name', file_item['filename']), "type": form.get('type', 'Document'), "uploaded_by": u['email'], 
-            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), "description": form.get('description', ''), "category": form.get('category', 'General'), "url": url
+            "id": str(uuid.uuid4())[:8], 
+            "name": form.get('name', f['orig_name']), 
+            "type": form.get('type', 'Document'), 
+            "uploaded_by": u['email'], 
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), 
+            "description": form.get('description', ''), 
+            "category": form.get('category', 'General'), 
+            "url": url
         }
+        
+        # Adaptive Schema Fallback: Try all potential tables
+        success = False
         for table in ['resources', 'Resources', 'Library']:
-            try: supabase_admin.table(table).insert(res_data).execute(); break
+            try:
+                supabase_admin.table(table).insert(res_data).execute()
+                success = True; break
             except: continue
+            
+        if not success: return jsonify({"error": "Database link failed. Please verify 'resources' table schema."}), 400
         return jsonify({"success": True, "url": url})
     except Exception as e: 
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
