@@ -40,7 +40,7 @@ def safe_get(obj, keys, default=None):
 def normalize_role(role_str):
     if not role_str: return "Mentee"
     r = str(role_str).lower().strip()
-    if r in ['programstaff', 'counselor', 'admin', 'staff']: return "ProgramStaff"
+    if r in ['programstaff', 'counselor', 'admin', 'staff', 'program manager']: return "ProgramStaff"
     if r in ['mentor']: return "Mentor"
     return "Mentee"
 
@@ -83,7 +83,7 @@ def init_cloud_seed():
 
 @app.route('/api/initial-data', methods=['GET'])
 def initial_data():
-    return jsonify({"status": "Online", "v": "145.0 Registry Perfection"})
+    return jsonify({"status": "Online", "v": "146.0 Resilience Master"})
 
 @app.route('/api/dashboard', methods=['GET'])
 def handle_dashboard():
@@ -167,9 +167,9 @@ def admin_data():
     try:
         users = safe_fetch(['users', 'profiles', 'Registry', 'Staff'])
         pairs = safe_fetch(['mentor_mentee_pairs', 'mentormenteepair', 'MentorMenteePair', 'Pairings'])
-        # Map full_name to name for frontend compatibility
         for u in users:
             u['name'] = safe_get(u, ['full_name', 'name', 'displayName']) or f"{safe_get(u, ['first_name', 'firstName'], '')} {safe_get(u, ['last_name', 'lastName'], '')}".strip() or "Unnamed"
+            u['role'] = normalize_role(safe_get(u, ['role', 'user_role'])) # Normalize role for frontend
         return jsonify({"users": users, "pairs": pairs, "profiles": users})
     except Exception as e: return jsonify({"error": str(e)}), 500
 
