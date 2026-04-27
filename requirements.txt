@@ -1,0 +1,7 @@
+requests
+supabase
+pandas
+openpyxl
+resend
+flask
+flask-cors
