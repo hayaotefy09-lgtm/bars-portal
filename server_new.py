@@ -94,7 +94,7 @@ def init_cloud_seed():
 
 @app.route('/api/initial-data', methods=['GET'])
 def initial_data():
-    return jsonify({"status": "Online", "v": "151.0 Upload Resilience"})
+    return jsonify({"status": "Online", "v": "152.0 Key Sanitization Master"})
 
 @app.route('/api/dashboard', methods=['GET'])
 def handle_dashboard():
@@ -329,7 +329,6 @@ def handle_upload_resource_file():
     u = get_user_from_headers()
     if not u: return jsonify({"error": "Auth Required"}), 401
     try:
-        # Robust Binary Parser (v151.0): Precision splitting without rstrip on bytes
         raw_body = request.get_data(); ct = request.headers.get('Content-Type', '')
         if "boundary=" not in ct: return jsonify({"error": "Invalid Request"}), 400
         boundary = b'--' + ct.split("boundary=")[1].encode()
@@ -337,10 +336,8 @@ def handle_upload_resource_file():
         for p in parts:
             if b'Content-Disposition' not in p: continue
             head_end = p.find(b'\r\n\r\n'); head = p[:head_end].decode('utf-8', errors='ignore')
-            # Extract content precisely using the slice, avoiding rstrip that corrupts binary files
             body = p[head_end+4:]
             if body.endswith(b'\r\n'): body = body[:-2]
-            
             name_match = re.search(r'name="([^"]+)"', head); file_match = re.search(r'filename="([^"]+)"', head)
             if name_match:
                 n = name_match.group(1)
@@ -348,9 +345,16 @@ def handle_upload_resource_file():
                 else: form[n] = body.decode('utf-8', errors='ignore')
         
         if 'file' not in form: return jsonify({"error": "File missing"}), 400
-        file_item = form['file']; fn = f"{uuid.uuid4()}_{file_item['filename']}"
-        mime, _ = mimetypes.guess_type(file_item['filename'])
+        file_item = form['file']
         
+        # Key Sanitization (v152.0): Replace non-alphanumeric chars with underscores
+        raw_fn = file_item['filename']
+        ext = os.path.splitext(raw_fn)[1]
+        base = os.path.splitext(raw_fn)[0]
+        sanitized_base = re.sub(r'[^a-zA-Z0-9]', '_', base)
+        fn = f"{uuid.uuid4()}_{sanitized_base}{ext}"
+        
+        mime, _ = mimetypes.guess_type(fn)
         supabase_admin.storage.from_('resource-files').upload(path=fn, file=file_item['content'], file_options={"content-type": mime or 'application/octet-stream'})
         url = supabase_admin.storage.from_('resource-files').get_public_url(fn)
         
@@ -363,7 +367,6 @@ def handle_upload_resource_file():
             except: continue
         return jsonify({"success": True, "url": url})
     except Exception as e: 
-        print(f"[UPLOAD ERROR]: {traceback.format_exc()}")
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
 @app.route('/api/resources/delete', methods=['POST'])
