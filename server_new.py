@@ -83,7 +83,7 @@ def init_cloud_seed():
 
 @app.route('/api/initial-data', methods=['GET'])
 def initial_data():
-    return jsonify({"status": "Online", "v": "147.0 Admin Schema Recovery"})
+    return jsonify({"status": "Online", "v": "148.0 Name Resolution Master"})
 
 @app.route('/api/dashboard', methods=['GET'])
 def handle_dashboard():
@@ -167,9 +167,20 @@ def admin_data():
     try:
         users = safe_fetch(['users', 'profiles', 'Registry', 'Staff'])
         pairs = safe_fetch(['mentor_mentee_pairs', 'mentormenteepair', 'MentorMenteePair', 'Pairings'])
+        
+        users_map = {}
         for u in users:
             u['name'] = safe_get(u, ['full_name', 'name', 'displayName']) or f"{safe_get(u, ['first_name', 'firstName'], '')} {safe_get(u, ['last_name', 'lastName'], '')}".strip() or "Unnamed"
-            u['role'] = normalize_role(safe_get(u, ['role', 'user_role'])) # Normalize role for frontend
+            u['role'] = normalize_role(safe_get(u, ['role', 'user_role']))
+            users_map[u['email']] = u['name']
+            
+        for p in pairs:
+            m_email = safe_get(p, ['mentor_email', 'mentorEmail', 'mentor'])
+            s_email = safe_get(p, ['mentee_email', 'menteeEmail', 'mentee'])
+            p['mentor'] = users_map.get(m_email, m_email or "Unknown")
+            p['mentee'] = users_map.get(s_email, s_email or "Unknown")
+            p['pair_id'] = safe_get(p, ['id', 'pair_id'])
+            
         return jsonify({"users": users, "pairs": pairs, "profiles": users})
     except Exception as e: return jsonify({"error": str(e)}), 500
 
