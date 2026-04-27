@@ -202,42 +202,36 @@ window.trashResource = async (resId, btn) => {
         if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
 
         try {
+            // Adaptive Deletion: Sends both ID keys for backend compatibility
             const res = await fetch(`${API_BASE}/api/resources/delete`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${BarsSession.get().token}`
                 },
-                body: JSON.stringify({ resource_id: resId })
+                body: JSON.stringify({ resource_id: resId, id: resId })
             });
 
-            // HARDENED HEARTBEAT: Log Status BEFORE parsing
-            const text = await res.text();
-            let data;
-            try { data = JSON.parse(text); } catch (e) { data = { success: false, error: 'Malformed Server Response: ' + text.substring(0, 30) }; }
-
+            const data = await res.json();
             logAPI('DELETE', '/api/resources/delete', res.status, data.success ? 'Success' : (data.error || 'Server error'));
 
             if (res.ok && data.success) {
-                // OPTIMISTIC UI: Remove from list immediately
+                // Optimistic UI: Remove card immediately
                 const card = btn ? btn.closest('.resource-card') : null;
                 if (card) {
                     card.style.opacity = '0';
                     card.style.transform = 'scale(0.9)';
                     setTimeout(() => card.remove(), 300);
                 }
-
-                // DELAYED RELOAD: Ensure cloud propagation
-                setTimeout(() => {
-                    window.location.reload();
-                }, 800);
+                
+                // Refresh dashboard in background to sync state
+                window.refreshDashboard();
             } else {
-                alert("❌ Deletion failed: " + (data.error || 'Server error.'));
+                alert("❌ Deletion failed: " + (data.error || 'The resource table might be restricted or missing.'));
                 if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
             }
-        } catch (e) {
-            logAPI('ERR', '/api/resources/delete', 'Fail', e.message);
-            alert("❌ Connectivity Error: " + e.message);
+        } catch (err) {
+            alert("❌ Network Error: " + err.message);
             if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
         }
     });
@@ -334,7 +328,9 @@ window.handleStaffActivate = async function (event) {
     const pass = document.getElementById('staff-activate-pass').value;
     const confirm = document.getElementById('staff-activate-confirm').value;
     if (pass !== confirm) return alert("Passwords do not match.");
+    
     try {
+        // STEP 1: Activate
         const res = await fetch(`${API_BASE}/api/activate-staff`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -343,14 +339,25 @@ window.handleStaffActivate = async function (event) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Activation failed");
 
-        // Populate the login form's hidden email field so the next step works
-        if (document.getElementById('staff-email')) {
-            document.getElementById('staff-email').value = window.STAFF_ACTIVATING_EMAIL;
+        // STEP 2: Automatic Login (Resilience Pattern)
+        const loginRes = await fetch(`${API_BASE}/api/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: window.STAFF_ACTIVATING_EMAIL, password: pass })
+        });
+        const loginData = await loginRes.json();
+        
+        if (loginRes.ok) {
+            BarsSession.save(loginData.token, loginData.user);
+            alert("Account activated! Redirecting to dashboard...");
+            window.showAuthForm('dash');
+        } else {
+            alert("Account activated! Please login manually.");
+            window.showAuthForm('staff-login');
         }
-
-        alert("Account activated successfully! Please sign in with your new password.");
-        window.showAuthForm('staff-login');
-    } catch (err) { alert(err.message); }
+    } catch (err) { 
+        alert("Activation error: " + err.message); 
+    }
 };
 
 window.verifyVisitorOTP = async function () {
