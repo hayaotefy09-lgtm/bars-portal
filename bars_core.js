@@ -287,7 +287,13 @@ window.handleAuthSubmit = async function (event, type) {
             body: JSON.stringify(payload)
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error || "Authentication failed");
+        if (!response.ok) throw new Error(result.error || result.message || "Authentication failed");
+
+        if (endpoint === 'register') {
+            alert(result.message || "Account created! You can now log in.");
+            window.showAuthForm('login');
+            return;
+        }
 
         BarsSession.save(result.token, result.user);
         window.showAuthForm('dash');
