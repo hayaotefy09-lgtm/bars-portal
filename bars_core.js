@@ -87,6 +87,14 @@ window.showPage = function (pageId, el) {
     if (pageId === 'survey') window.renderSurveyCenter();
     if (pageId === 'sessions') {
         window.renderSessions(data.sessions || []);
+        
+        // Set default schedule target if missing and exactly one pair exists
+        if (!window.SELECTED_SCHEDULE_NAME && data.pairs && data.pairs.length === 1) {
+            const p = data.pairs[0];
+            const name = p.name || p.mentee_name || p.mentor_name || "Partner";
+            window.setScheduleTarget(name, p.pair_id);
+        }
+
         if (isCounselor && window.renderStaffSessionsSelector) window.renderStaffSessionsSelector();
 
         // Mentee Backup Visibility Logic
@@ -1052,8 +1060,22 @@ window.sendMessage = async function (e) {
     if (e) e.preventDefault();
     const input = document.getElementById('chat-input');
     if (!input.value || !window.CURRENT_CHAT_PAIR) return;
-    const res = await fetch(`${API_BASE}/api/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${BarsSession.get().token}` }, body: JSON.stringify({ pair_id: window.CURRENT_CHAT_PAIR, message: input.value }) });
-    if (res.ok) { input.value = ''; window.syncChat(); }
+    try {
+        const res = await fetch(`${API_BASE}/api/messages`, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${BarsSession.get().token}` }, 
+            body: JSON.stringify({ pair_id: window.CURRENT_CHAT_PAIR, message: input.value }) 
+        });
+        if (res.ok) { 
+            input.value = ''; 
+            window.syncChat(); 
+        } else {
+            const err = await res.json();
+            alert("Send failed: " + (err.error || "Database error"));
+        }
+    } catch (err) {
+        alert("Connection error: " + err.message);
+    }
 };
 
 // 8. Analytics
