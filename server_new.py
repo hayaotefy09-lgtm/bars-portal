@@ -494,6 +494,28 @@ def handle_resource_delete():
         return jsonify({"success": success})
     except Exception as e: return jsonify({"error": str(e)}), 500
 
+@app.route('/api/sessions/schedule', methods=['POST'])
+def handle_session_schedule():
+    u = get_user_from_headers()
+    if not u: return jsonify({"error": "Auth Required"}), 401
+    try:
+        data = request.get_json()
+        pid, start, link = data.get('pair_id'), data.get('start_time'), data.get('link')
+        role = normalize_role(u['role'])
+        session_data = {
+            "pair_id": pid, "start_time": start, "meeting_link": link,
+            "scheduled_by": u['email'], "scheduler_name": u['name'], "scheduler_role": role, "status": "Scheduled"
+        }
+        success = False; err_msg = ""
+        for table in ['sessions', 'Sessions', 'Events']:
+            try:
+                supabase_admin.table(table).insert(session_data).execute()
+                success = True; break
+            except Exception as e: err_msg = str(e); continue
+        if success: return jsonify({"success": True})
+        return jsonify({"error": f"Database error: {err_msg}"}), 500
+    except Exception as e: return jsonify({"error": str(e)}), 500
+
 @app.route('/api/sessions/delete', methods=['POST'])
 def handle_session_delete():
     u = get_user_from_headers()

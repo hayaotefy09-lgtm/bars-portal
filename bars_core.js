@@ -1241,35 +1241,27 @@ window.submitSchedule = async () => {
     const time = document.getElementById('schedule-time-input').value;
     const link = document.getElementById('schedule-link-input').value;
     const user = BarsSession.get()?.user;
-    const isCounselor = !!user?.isCounselor || user?.role === 'ProgramStaff';
-
-    let participants = '';
-    if (isCounselor) {
-        const mode = document.getElementById('meeting-participants-select').value;
-        const myPairs = window.DASH_DATA?.pairs || [];
-        const pair = myPairs.find(p => p.pair_id === window.SELECTED_PAIR_ID);
-        if (pair) {
-            participants = user.email; // Host is always in
-            if (mode === 'Mentee Only') participants += `,${pair.mentee_email || pair.email}`;
-            else participants += `,${pair.mentee_email || pair.email},${pair.mentor_email}`;
-        }
-    }
-
-    const btn = document.getElementById('final-schedule-btn');
     if (!time) return alert("Please pick a time.");
+    
+    const btn = document.getElementById('final-schedule-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Scheduling...'; }
 
-    const res = await fetch(`${API_BASE}/api/sessions/schedule`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${BarsSession.get().token}` },
-        body: JSON.stringify({ pair_id: window.SELECTED_PAIR_ID, start_time: `${window.SELECTED_DATE}T${time}`, link: link || '' })
-    });
-    if (res.ok) {
-        window.closeScheduleModal();
-        initDashboard();
-    } else {
-        const err = await res.json();
-        alert("Scheduling failed: " + (err.error || "Unknown error"));
+    try {
+        const res = await fetch(`${API_BASE}/api/sessions/schedule`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${BarsSession.get().token}` },
+            body: JSON.stringify({ pair_id: window.SELECTED_PAIR_ID, start_time: `${window.SELECTED_DATE}T${time}`, link: link || '' })
+        });
+        if (res.ok) {
+            window.closeScheduleModal();
+            initDashboard();
+        } else {
+            const err = await res.json();
+            alert("Scheduling failed: " + (err.error || "Unknown error"));
+            if (btn) { btn.disabled = false; btn.textContent = 'Schedule Now'; }
+        }
+    } catch (err) {
+        alert("Connectivity error: " + err.message);
         if (btn) { btn.disabled = false; btn.textContent = 'Schedule Now'; }
     }
 };
@@ -1790,10 +1782,11 @@ window.renderWhiteboard = async function() {
         const isCounselor = user.role === 'Counselor' || user.role === 'counselor' || !!user.isCounselor;
         const isMaster = user.role === 'ProgramStaff' || isCounselor;
 
-        // PERMISSION CHECK: Hide input box if ProgramStaff but NOT counselor
+        // PERMISSION CHECK: Show input box for Mentors and Counselors
         const inputBox = document.getElementById('whiteboard-input-box');
         if (inputBox) {
-            inputBox.style.display = (user.role === 'ProgramStaff' && !isCounselor) ? 'none' : 'flex';
+            const isMentor = user.role === 'Mentor' || user.role === 'mentor';
+            inputBox.style.display = (isMentor || isCounselor) ? 'flex' : 'none';
         }
 
         container.innerHTML = notes.map(n => `
