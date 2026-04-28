@@ -316,12 +316,14 @@ def handle_whiteboard():
                     if resp and resp.data is not None:
                         out = []
                         for row in resp.data:
+                            m_name = row.get('mentor_name')
+                            if not m_name and row.get('mentor_email') == u['email']: m_name = u['name']
                             out.append({
                                 'id': row.get('id'),
                                 'note': row.get('note') or row.get('content'),
                                 'created_at': row.get('created_at') or row.get('last_updated'),
                                 'mentor_email': row.get('mentor_email'),
-                                'mentor_name': row.get('mentor_name', 'Unknown')
+                                'mentor_name': m_name or 'Unknown'
                             })
                         return jsonify(out)
                 except: continue

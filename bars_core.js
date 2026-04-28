@@ -637,6 +637,15 @@ window.renderSurveyCenter = async function () {
     if (backup) backup.style.display = isMentor ? 'block' : 'none';
     if (toggle) toggle.style.display = isStaff ? 'flex' : 'none';
 
+    // Set Dynamic Links for Mentor
+    if (isMentor && window.DASH_DATA?.profile?.surveys) {
+        const surveys = window.DASH_DATA.profile.surveys;
+        const linkDuring = document.getElementById('link-mentor-during');
+        const linkPost = document.getElementById('link-mentor-post');
+        if (linkDuring && surveys.mentor_during) linkDuring.href = surveys.mentor_during;
+        if (linkPost && surveys.mentor_post) linkPost.href = surveys.mentor_post;
+    }
+
     if (isMentor && hub && surveySection && backup) {
         // PROMOTED REORDER: Banner (Header) -> Hub (Safeguarding) -> Backup (Links) -> Rest
         const banner = surveySection.querySelector('.banner-block');
@@ -1254,6 +1263,17 @@ window.renderSessions = function (sessions) {
     const isMentee = user?.role === 'Mentee';
     const filter = window.CURRENT_SESSION_FILTER || 'Upcoming';
 
+    const menteeLinks = document.getElementById('mentee-backup-surveys');
+    if (menteeLinks) menteeLinks.style.display = isMentee ? 'block' : 'none';
+
+    if (isMentee && window.DASH_DATA?.profile?.surveys) {
+        const surveys = window.DASH_DATA.profile.surveys;
+        const linkPre = document.getElementById('link-mentee-pre');
+        const linkPost = document.getElementById('link-mentee-post');
+        if (linkPre && surveys.mentee_pre) linkPre.href = surveys.mentee_pre;
+        if (linkPost && surveys.mentee_post) linkPost.href = surveys.mentee_post;
+    }
+
     const now = new Date().getTime();
     const filtered = sessions.filter(s => {
         const sTime = new Date(s.start_time).getTime();
@@ -1417,15 +1437,17 @@ window.renderResources = (r) => {
     }
 
     g.innerHTML = r.map(x => {
-        const url = x.url && x.url !== 'null' ? x.url : '#';
+        const actualUrl = x.url || x.link || '#';
+        const url = actualUrl !== 'null' ? actualUrl : '#';
         const description = x.description && x.description !== 'null' ? x.description : 'No description provided.';
         const hasUrl = url !== '#';
         const isOwner = (user?.email === x.uploaded_by) || (user?.role === 'ProgramStaff');
+        const actualName = x.name || x.title || x.item_name || 'Untitled Resource';
 
         return `<div class="resource-card" style="background:white; border-radius:24px; padding:1.75rem; border:1px solid #f1f5f9; display: flex; flex-direction: column; height: 100%; position: relative; transition: all 0.3s ease;">
             
             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
-                <div style="font-weight:800; color:#D4AF37; font-size: 1.15rem; flex: 1; padding-right: 2rem;">${x.name || 'Untitled Resource'}</div>
+                <div style="font-weight:800; color:#D4AF37; font-size: 1.15rem; flex: 1; padding-right: 2rem;">${actualName}</div>
                 
                 ${isOwner ? `
                     <button onclick="window.trashResource('${x.id}', this)" title="Delete Resource" 
@@ -1442,7 +1464,7 @@ window.renderResources = (r) => {
             
             <div style="display:flex; gap:0.5rem; margin-top:1.5rem;">
                 ${hasUrl ? `
-                    <button onclick="window.openResourcePreview('${url}', '${x.name}')" class="btn-black-gold" style="flex:1; padding:0.75rem; border-radius:12px; font-weight:800; border:none; cursor:pointer; font-size: 0.9rem;">Preview</button>
+                    <button onclick="window.openResourcePreview('${url}', '${actualName.replace(/'/g, "\\'")}')" class="btn-black-gold" style="flex:1; padding:0.75rem; border-radius:12px; font-weight:800; border:none; cursor:pointer; font-size: 0.9rem;">Preview</button>
                     <a href="${url}" target="_blank" class="btn-white" style="flex:1; text-align:center; text-decoration:none; padding:0.75rem; border-radius:12px; font-weight:800; border:1px solid rgba(212, 175, 55, 0.15); color:#D4AF37; font-size: 0.9rem;">Open Link</a>
                 ` : `
                     <div style="flex: 1; text-align: center; color: #94a3b8; font-size: 0.85rem; font-style: italic; padding: 0.75rem; background: #f8fafc; border-radius: 12px; border: 1px dashed #e2e8f0;">Link Unavailable</div>
