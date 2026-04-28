@@ -306,21 +306,45 @@ def handle_whiteboard():
     try:
         role = normalize_role(u['role'])
         if request.method == 'GET':
-            for table in ['whiteboard', 'Whiteboard', 'Notes']:
+            for table in ['whiteboard', 'Whiteboard', 'Notes', 'mentor_notes']:
                 try:
                     query = supabase_admin.table(table).select('*')
                     if role == 'Mentor': query = query.eq('mentor_email', u['email'])
-                    resp = query.order('created_at', desc=True).execute()
-                    if resp.data is not None: return jsonify(resp.data)
+                    resp = None
+                    try: resp = query.order('created_at', desc=True).execute()
+                    except: resp = query.order('last_updated', desc=True).execute()
+                    if resp and resp.data is not None:
+                        out = []
+                        for row in resp.data:
+                            out.append({
+                                'id': row.get('id'),
+                                'note': row.get('note') or row.get('content'),
+                                'created_at': row.get('created_at') or row.get('last_updated'),
+                                'mentor_email': row.get('mentor_email'),
+                                'mentor_name': row.get('mentor_name', 'Unknown')
+                            })
+                        return jsonify(out)
                 except: continue
             return jsonify([])
         else:
             if role != 'Mentor' and role != 'ProgramStaff': return jsonify({"error": "Unauthorized"}), 403
-            data = request.get_json(); note = data.get('note')
-            supabase_admin.table('whiteboard').insert({
-                "mentor_name": u['name'], "mentor_email": u['email'], "note": note, "created_at": datetime.datetime.now().isoformat()
-            }).execute()
-            return jsonify({"success": True})
+            data = request.get_json(); note = data.get('note') or data.get('content')
+            success = False
+            for table in ['whiteboard', 'Whiteboard', 'Notes', 'mentor_notes']:
+                try:
+                    supabase_admin.table(table).insert({
+                        "mentor_name": u['name'], "mentor_email": u['email'], "note": note, "created_at": datetime.datetime.now().isoformat()
+                    }).execute()
+                    success = True; break
+                except:
+                    try:
+                        supabase_admin.table(table).insert({
+                            "mentor_email": u['email'], "content": note, "last_updated": datetime.datetime.now().isoformat()
+                        }).execute()
+                        success = True; break
+                    except: continue
+            if success: return jsonify({"success": True})
+            return jsonify({"error": "Database link failed."}), 400
     except Exception as e: return jsonify({"error": str(e)}), 500
 
 @app.route('/api/survey/analytics', methods=['GET'])
@@ -408,20 +432,41 @@ def handle_upload_resource_file():
         url = supabase_admin.storage.from_('resource-files').get_public_url(f['filename'])
         print(f"[UPLOAD]: Public URL: {url}")
         
-        res_data = {
-            "id": str(uuid.uuid4())[:8], "name": form.get('item_name') or form.get('name') or f['orig_name'], "type": form.get('type', 'Document'), "uploaded_by": u['email'], 
-            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), "description": form.get('description', ''), "category": form.get('category', 'General'), "url": url
-        }
+        name_val = form.get('item_name') or form.get('name') or f['orig_name']
         
         success = False
         for table in ['resources', 'Resources', 'Library']:
             try:
+                res_data = {
+                    "id": str(uuid.uuid4()), 
+                    "title": name_val, 
+                    "uploaded_by": u['email'], 
+                    "description": form.get('description', ''), 
+                    "category": form.get('category', 'General'), 
+                    "link": url
+                }
                 supabase_admin.table(table).insert(res_data).execute()
-                print(f"[UPLOAD]: Saved to table '{table}'")
+                print(f"[UPLOAD]: Saved to table '{table}' with title/link schema")
                 success = True; break
-            except Exception as e: 
-                print(f"[UPLOAD TABLE ERROR] {table}: {str(e)}")
-                continue
+            except Exception as e:
+                print(f"[UPLOAD TABLE ERROR title/link] {table}: {str(e)}")
+                try:
+                    res_data_old = {
+                        "id": str(uuid.uuid4())[:8], 
+                        "name": name_val, 
+                        "type": form.get('type', 'Document'), 
+                        "uploaded_by": u['email'], 
+                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), 
+                        "description": form.get('description', ''), 
+                        "category": form.get('category', 'General'), 
+                        "url": url
+                    }
+                    supabase_admin.table(table).insert(res_data_old).execute()
+                    print(f"[UPLOAD]: Saved to table '{table}' with name/url schema")
+                    success = True; break
+                except Exception as e2:
+                    print(f"[UPLOAD TABLE ERROR name/url] {table}: {str(e2)}")
+                    continue
         
         if not success: return jsonify({"error": "Database link failed."}), 400
         return jsonify({"success": True, "url": url})
