@@ -145,8 +145,32 @@ def handle_dashboard():
                 fn_m, _, _ = format_user_name(m); fn_s, _, _ = format_user_name(s)
                 res["pairs"].append({"mentor_name": fn_m, "mentee_name": fn_s, "pair_id": p_id, "mentor_email": m_email, "mentee_email": s_email})
         
+        # Normalize Sessions for Frontend Parity
+        sessions_raw = safe_fetch(['sessions', 'Sessions', 'Events'])
+        sessions_normalized = []
+        for s in sessions_raw:
+            m_e = safe_get(s, ['mentor_email', 'mentorEmail'])
+            s_e = safe_get(s, ['mentee_email', 'menteeEmail'])
+            partner_name = "Partner"
+            if u['email'] == m_e:
+                p_u = users_map.get(s_e, {})
+                partner_name, _, _ = format_user_name(p_u)
+            elif u['email'] == s_e:
+                p_u = users_map.get(m_e, {})
+                partner_name, _, _ = format_user_name(p_u)
+            
+            sessions_normalized.append({
+                "id": s.get('id'),
+                "start_time": s.get('session_date') or s.get('start_time'),
+                "meeting_link": s.get('notes') or s.get('meeting_link') or s.get('link'),
+                "status": s.get('status', 'Scheduled'),
+                "mentor_email": m_e,
+                "mentee_email": s_e,
+                "partner_name": partner_name
+            })
+            
         res["resources"] = resources_data
-        res["sessions"] = sessions_data
+        res["sessions"] = sessions_normalized
         res["messages"] = messages_data 
         fn_u, f_u, l_u = format_user_name(u)
         is_c = normalize_role(u.get('role')) == 'ProgramStaff'
@@ -501,17 +525,31 @@ def handle_session_schedule():
     try:
         data = request.get_json()
         pid, start, link = data.get('pair_id'), data.get('start_time'), data.get('link')
-        role = normalize_role(u['role'])
+        
+        pair = None
+        for table in ['mentor_mentee_pairs', 'mentormenteepair', 'MentorMenteePair', 'Pairings']:
+            try:
+                r = supabase_admin.table(table).select('*').eq('id', pid).execute()
+                if r.data: pair = r.data[0]; break
+            except: continue
+        
+        if not pair: return jsonify({"error": "Pairing not found"}), 404
+        
+        m_e = pair.get('mentor_email')
+        s_e = pair.get('mentee_email')
+        
         session_data = {
-            "pair_id": pid, "start_time": start, "meeting_link": link,
-            "scheduled_by": u['email'], "scheduler_name": u['name'], "scheduler_role": role, "status": "Scheduled"
+            "mentor_email": m_e, "mentee_email": s_e,
+            "session_date": start, "notes": link or "", "status": "Scheduled"
         }
+        
         success = False; err_msg = ""
         for table in ['sessions', 'Sessions', 'Events']:
             try:
                 supabase_admin.table(table).insert(session_data).execute()
                 success = True; break
             except Exception as e: err_msg = str(e); continue
+            
         if success: return jsonify({"success": True})
         return jsonify({"error": f"Database error: {err_msg}"}), 500
     except Exception as e: return jsonify({"error": str(e)}), 500
