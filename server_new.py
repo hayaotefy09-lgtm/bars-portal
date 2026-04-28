@@ -70,25 +70,27 @@ def safe_fetch(table_names, fallback_data=[]):
     return fallback_data
 
 def init_cloud_seed():
-    print("[SEED]: Verifying Admin account...")
+    print("[SEED]: Verifying core accounts...")
     try:
-        admin_email = "admin@bars.ae"
-        found = False
-        for table in ['users', 'profiles', 'Registry']:
-            try:
-                res = supabase_admin.table(table).select('email').eq('email', admin_email).execute()
-                if res.data: found = True; break
-            except: continue
+        seeds = [
+            {"email": "admin@bars.ae", "full_name": "System Administrator", "role": "ProgramStaff", "password": "bars"},
+            {"email": "programstaff@naischool.ae", "full_name": "Program Staff", "role": "ProgramStaff", "password": "bars"},
+            {"email": "testmentor@naischool.ae", "full_name": "Test Mentor", "role": "Mentor", "password": "bars"},
+            {"email": "testmentee@naischool.ae", "full_name": "Test Mentee", "role": "Mentee", "password": "bars"}
+        ]
         
-        if not found:
-            print(f"[SEED]: Admin {admin_email} not found. Creating authoritative entry...")
-            admin_data = {
-                "email": admin_email, "full_name": "System Administrator", "role": "ProgramStaff", "password": "bars", "bio": "System Root Account", "interests": "Administration"
-            }
-            supabase_admin.table('users').insert(admin_data).execute()
-            print("[SEED]: Admin account created successfully.")
-        else:
-            print("[SEED]: Admin account verified.")
+        for account in seeds:
+            found = False
+            for table in ['users', 'profiles', 'Registry']:
+                try:
+                    res = supabase_admin.table(table).select('email').eq('email', account['email']).execute()
+                    if res.data: found = True; break
+                except: continue
+            
+            if not found:
+                print(f"[SEED]: {account['email']} not found. Creating...")
+                supabase_admin.table('users').insert(account).execute()
+        print("[SEED]: Cloud seeding complete.")
     except Exception as e:
         print(f"[SEED ERROR]: Cloud seeding failed: {str(e)}")
 
