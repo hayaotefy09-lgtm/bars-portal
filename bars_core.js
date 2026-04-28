@@ -431,7 +431,7 @@ async function initDashboard() {
         // Populate Sidebar
         const items = [
             { id: 'dashboard', label: 'Dashboard' },
-            { id: 'messages', label: 'Messages', hideForStaffOnly: true, hideForMentors: true },
+            { id: 'messages', label: 'Messages', hideForStaffOnly: true },
             { id: 'survey', label: 'Survey Center', hideForMentees: true, hideForMentors: true },
             { id: 'sessions', label: 'My Sessions', hideForStaffOnly: true, hideForVisitors: true },
             { id: 'resources', label: 'Library' },

@@ -248,7 +248,7 @@ def register():
     try:
         data = request.get_json(); email, fn, ln, pw, role = data.get('email', '').lower().strip(), data.get('firstName', ''), data.get('lastName', ''), data.get('password', ''), data.get('role', 'Mentee')
         full_name = f"{fn} {ln}".strip()
-        supabase_admin.table('users').insert({"email": email, "full_name": full_name, "password": pw, "role": role, "bio": "", "interests": ""}).execute()
+        supabase_admin.table('users').insert({"id": str(uuid.uuid4()), "email": email, "full_name": full_name, "password": pw, "role": role, "bio": "", "interests": ""}).execute()
         return jsonify({"status": "success", "message": "Account created! You can now log in."}), 200
     except Exception as e: return jsonify({"status": "error", "message": str(e)}), 500
 
