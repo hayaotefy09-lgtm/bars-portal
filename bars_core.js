@@ -1320,7 +1320,9 @@ window.renderSessions = function (sessions) {
         const isMentorForStaffSession = (s.scheduler_role === 'ProgramStaff' || s.scheduler_role === 'Counselor') && user.role === 'Mentor';
 
         // Final Parity Visibility for Trash Icon
-        const canTrash = isScheduler || isCounselor || isMentorForStaffSession;
+        const isMentor = user.role === 'Mentor' || user.role === 'mentor';
+        const isParticipantMentor = isMentor && s.mentor_email === user.email;
+        const canTrash = isScheduler || isCounselor || isMentorForStaffSession || isParticipantMentor;
 
         // JOIN LOCK LOGIC (Mentees only)
         // Link remains inactive until they click the Pre-Session survey link

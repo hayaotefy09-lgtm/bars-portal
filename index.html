@@ -509,7 +509,14 @@
 
                 <div
                     style="background:white; border-radius:20px; padding:2rem; box-shadow:0 10px 30px rgba(0,0,0,0.05); margin-top:1rem;">
-                    <!-- Input section removed per user request -->
+                    <!-- Whiteboard Input Box (Toggled by JS based on role) -->
+                    <div id="whiteboard-input-box" style="display:none; flex-direction:column; gap:1.25rem; margin-bottom:2rem; border-bottom:1.5px solid #f1f5f9; padding-bottom:2rem;">
+                        <textarea id="whiteboard-input" placeholder="Type a new session note or internal feedback here..." 
+                            style="width:100%; border:1.5px solid #f1f5f9; border-radius:16px; padding:1.25rem; min-height:120px; outline:none; font-family:inherit; font-size:1rem;"></textarea>
+                        <div style="display:flex; justify-content:flex-end;">
+                            <button onclick="window.submitWhiteboard()" class="btn-black-gold" style="padding:0.8rem 2rem; border-radius:12px; font-weight:800;">Post Note</button>
+                        </div>
+                    </div>
                     <div id="whiteboard-list" style="display:flex; flex-direction:column; gap:1.25rem;">
                         <!-- Notes injected here -->
                     </div>
