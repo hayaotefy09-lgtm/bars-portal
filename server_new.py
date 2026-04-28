@@ -109,89 +109,77 @@ def handle_dashboard():
     try:
         u = get_user_from_headers()
         if not u: return jsonify({"error": "Auth Required"}), 401
-        res = {"pairs": [], "mentors": [], "sessions": [], "resources": [], "messages": [], "profile": {}}
         
-        users_data = safe_fetch(['users', 'profiles', 'Registry', 'Staff'])
-        pairs_data = safe_fetch(['mentor_mentee_pairs', 'mentormenteepair', 'MentorMenteePair', 'Pairings'])
-        sessions_data = safe_fetch(['sessions', 'Sessions', 'Events'])
-        resources_data = safe_fetch(['resources', 'Resources', 'Library'])
+        # 1. Fetch Cloud Data
+        users_data = safe_fetch(['users_bars', 'users', 'Registry'])
+        pairs_data = safe_fetch(['mentor_mentee_pairs', 'Pairings'])
+        sessions_raw = safe_fetch(['sessions_bars', 'sessions', 'Sessions'])
+        resources_data = safe_fetch(['resources_bars', 'resources', 'Library'])
         messages_data = safe_fetch(['messages', 'Messages', 'Chats'])
-        
-        users_map = {safe_get(r, ['email', 'user_email']): r for r in users_data} if users_data else {}
-        
+
+        users_map = {safe_get(r, ['email', 'user_email']): r for r in users_data}
         def format_user_name(usr):
             fn = safe_get(usr, ['full_name', 'name', 'displayName']) or f"{safe_get(usr, ['first_name', 'firstName'], '')} {safe_get(usr, ['last_name', 'lastName'], '')}".strip() or "Unnamed User"
             parts = fn.split(' ', 1); f_name = parts[0] if len(parts) > 0 else fn; l_name = parts[1] if len(parts) > 1 else ""
             return fn, f_name, l_name
 
-        # Populate initial mentor list
+        role = normalize_role(u['role'])
+        is_counselor = u.get('isCounselor') or (u['role'] == 'ProgramStaff' and u['email'] in ['admin@bars.ae', 'counselor@bars.ae'])
+
+        res = {"pairs": [], "mentors": [], "sessions": [], "resources": [], "messages": [], "profile": {}}
+
+        # 2. Process Mentors
+        paired_emails = {safe_get(p, ['mentor_email', 'mentorEmail']) for p in pairs_data if safe_get(p, ['mentor_email', 'mentorEmail'])}
         for email, usr in users_map.items():
-            if not email: continue
-            role = normalize_role(safe_get(usr, ['role', 'user_role']))
-            if role == 'Mentor':
+            if normalize_role(safe_get(usr, ['role', 'user_role'])) == 'Mentor':
                 fn, f_name, l_name = format_user_name(usr)
-                res["mentors"].append({"name": fn, "first_name": f_name, "last_name": l_name, "email": email, "bio": safe_get(usr, ['bio']), "interests": safe_get(usr, ['interests'])})
+                res["mentors"].append({
+                    "name": fn, "first_name": f_name, "last_name": l_name, "email": email, 
+                    "bio": safe_get(usr, ['bio']), "interests": safe_get(usr, ['interests']),
+                    "status": "Paired" if email in paired_emails else "Available"
+                })
 
-        # 1. Mentor Visibility Rules
-        paired_mentor_emails = {safe_get(p, ['mentor_email', 'mentorEmail']) for p in pairs_data if safe_get(p, ['mentor_email', 'mentorEmail'])}
-        mentors_filtered = []
-        cur_role = normalize_role(u['role'])
-        
-        # Mentees see ONLY their assigned mentor
-        my_mentor_email = None
-        if cur_role == 'Mentee':
-            for p in pairs_data:
-                if safe_get(p, ['mentee_email', 'menteeEmail']) == u['email']:
-                    my_mentor_email = safe_get(p, ['mentor_email', 'mentorEmail'])
-                    break
+        # 3. Apply Mentee Filter (Mentees see only their assigned mentor)
+        if role == 'Mentee':
+            my_mentor = next((safe_get(p, ['mentor_email', 'mentorEmail']) for p in pairs_data if safe_get(p, ['mentee_email', 'menteeEmail']) == u['email']), None)
+            res["mentors"] = [m for m in res["mentors"] if m['email'] == my_mentor]
 
-        for m in res["mentors"]:
-            m_email = m.get('email')
-            if cur_role == 'Mentee' and m_email != my_mentor_email: continue
-            
-            # Add Paired/Available Status
-            m["status"] = "Paired" if m_email in paired_mentor_emails else "Available"
-            mentors_filtered.append(m)
-        res["mentors"] = mentors_filtered
-
+        # 4. Process Pairings (Role-based)
         for p in pairs_data:
-            m_email = safe_get(p, ['mentor_email', 'mentorEmail', 'mentor'])
-            s_email = safe_get(p, ['mentee_email', 'menteeEmail', 'mentee'])
-            if not m_email or not s_email: continue
+            m_e = safe_get(p, ['mentor_email', 'mentorEmail'])
+            s_e = safe_get(p, ['mentee_email', 'menteeEmail'])
             p_id = safe_get(p, ['id', 'pair_id'])
-            
-            if cur_role == 'Mentor' and m_email == u['email']:
-                uu = users_map.get(s_email, {})
-                fn, f_name, l_name = format_user_name(uu)
-                res["pairs"].append({"name": fn, "first_name": f_name, "last_name": l_name, "email": s_email, "pair_id": p_id, "type": "Mentee", "bio": safe_get(uu, ['bio']), "interests": safe_get(uu, ['interests'])})
-            elif cur_role == 'Mentee' and s_email == u['email']:
-                uu = users_map.get(m_email, {})
-                fn, f_name, l_name = format_user_name(uu)
-                res["pairs"].append({"name": fn, "first_name": f_name, "last_name": l_name, "email": m_email, "pair_id": p_id, "type": "Mentor", "bio": safe_get(uu, ['bio']), "interests": safe_get(uu, ['interests'])})
-            elif cur_role == 'ProgramStaff' or is_c: # Counselors see pairs too
-                m = users_map.get(m_email, {}); s = users_map.get(s_email, {})
-                fn_m, _, _ = format_user_name(m); fn_s, _, _ = format_user_name(s)
-                res["pairs"].append({"mentor_name": fn_m, "mentee_name": fn_s, "pair_id": p_id, "mentor_email": m_email, "mentee_email": s_email})
-        
-        # Normalize Sessions for Frontend Parity
+            if role == 'ProgramStaff' or is_counselor or u['email'] in [m_e, s_e]:
+                m_u = users_map.get(m_e, {}); s_u = users_map.get(s_e, {})
+                fn_m, _, _ = format_user_name(m_u); fn_s, _, _ = format_user_name(s_u)
+                res["pairs"].append({
+                    "pair_id": p_id, "mentor_name": fn_m, "mentee_name": fn_s, 
+                    "mentor_email": m_e, "mentee_email": s_e
+                })
+
+        # 5. Process & Normalize Sessions
+        sessions_filtered = []
+        if role == 'Mentor':
+            sessions_filtered = [s for s in sessions_raw if safe_get(s, ['mentor_email', 'mentorEmail']) == u['email']]
+        elif role == 'Mentee':
+            sessions_filtered = [s for s in sessions_raw if safe_get(s, ['mentee_email', 'menteeEmail']) == u['email']]
+        elif is_counselor:
+            sessions_filtered = sessions_raw
+        else: # Regular staff: hide counselor sessions
+            sessions_filtered = [s for s in sessions_raw if '[SCHEDULER:admin@bars.ae]' not in str(s.get('notes',''))]
+
         sessions_normalized = []
-        for s in sessions_data:
+        for s in sessions_filtered:
             m_e = safe_get(s, ['mentor_email', 'mentorEmail'])
             s_e = safe_get(s, ['mentee_email', 'menteeEmail'])
+            raw_notes = str(s.get('notes', ''))
+            sched_by = raw_notes.split('[SCHEDULER:')[1].split(']')[0] if '[SCHEDULER:' in raw_notes else None
             
-            # Extract Scheduler from notes if present: [SCHEDULER:email]
-            raw_notes = s.get('notes', '')
-            sched_by = None
-            if '[SCHEDULER:' in str(raw_notes):
-                try: sched_by = str(raw_notes).split('[SCHEDULER:')[1].split(']')[0]
-                except: pass
-            
+            # Partner Resolution
             partner_name = "Partner"
-            if u['email'] == m_e:
-                p_u = users_map.get(s_e, {})
-                partner_name, _, _ = format_user_name(p_u)
-            elif u['email'] == s_e:
-                p_u = users_map.get(m_e, {})
+            p_email = s_e if u['email'] == m_e else (m_e if u['email'] == s_e else None)
+            if p_email:
+                p_u = users_map.get(p_email, {})
                 partner_name, _, _ = format_user_name(p_u)
             
             sessions_normalized.append({
@@ -199,30 +187,31 @@ def handle_dashboard():
                 "start_time": s.get('session_date') or s.get('start_time'),
                 "meeting_link": s.get('notes') or s.get('meeting_link') or s.get('link'),
                 "status": s.get('status', 'Scheduled'),
-                "mentor_email": m_e,
-                "mentee_email": s_e,
                 "partner_name": partner_name,
                 "scheduled_by": sched_by
             })
         res["sessions"] = sessions_normalized
-            
         res["resources"] = resources_data
-        res["sessions"] = sessions_normalized
-        res["messages"] = messages_data 
-        fn_u, f_u, l_u = format_user_name(u)
-        is_c = normalize_role(u.get('role')) == 'ProgramStaff'
-        
-        gender = str(safe_get(u, ['Gender', 'gender'], '')).replace("'", "").strip()
+        res["messages"] = messages_data
+
+        # 6. Profile & Surveys
+        gender = str(safe_get(u, ['Gender', 'gender'], '')).strip().replace("'", "")
         survey_links = {
             "mentee_pre": "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw_2BXp3VMmxMiX9DbxtNcF1UNFFERFlFRTBSNUEwQ0pWT1NDWlhBRUFPMC4u",
             "mentee_post": "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw_2BXp3VMmxMiX9DbxtNcF1UMERGNVk0SkY4RkY4RTRMS1E2SU85MVhVSC4u",
             "mentor_post": "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw5ArmNjQOFNPtxHCG2-Ep6dURVE1WEo3TUFORjg0N0NNWTVNTTNYUDdGNS4u",
             "mentor_during": "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw5ArmNjQOFNPtxHCG2-Ep6dUNUtZTEEyTU9VNVMyMEoxTjBTQk1KTlVaUC4u"
         }
+        fn_u, f_u, l_u = format_user_name(u)
+        res["profile"] = {
+            "name": fn_u, "first_name": f_u, "last_name": l_u, "email": u['email'], 
+            "role": role, "isCounselor": is_counselor, "gender": gender, "surveys": survey_links
+        }
         
-        res["profile"] = {"name": fn_u, "first_name": f_u, "last_name": l_u, "email": u.get('email'), "role": u['role'], "isCounselor": is_c, "gender": gender, "surveys": survey_links}
         return jsonify(res)
-    except Exception as e: return jsonify({"error": f"Dashboard Error: {str(e)}"}), 500
+    except Exception as e:
+        print(f"[DASHBOARD ERROR]: {str(e)}")
+        return jsonify({"error": f"Dashboard failure: {str(e)}"}), 500
 
 @app.route('/api/login', methods=['POST'])
 def handle_login():
