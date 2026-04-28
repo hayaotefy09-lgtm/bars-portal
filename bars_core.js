@@ -643,7 +643,7 @@ window.renderSurveyCenter = async function () {
     const isMentor = user.role === 'Mentor';
 
     const hub = document.getElementById('mentor-safeguarding-hub');
-    const backup = document.getElementById('mentor-backup-surveys-footer');
+    const backup = document.getElementById('mentor-backup-surveys-footer') || document.getElementById('mentee-backup-surveys');
     const toggle = document.getElementById('counselor-survey-toggle');
     const surveySection = document.getElementById('survey');
 
