@@ -446,7 +446,7 @@ async function initDashboard() {
         const items = [
             { id: 'dashboard', label: 'Dashboard' },
             { id: 'messages', label: 'Messages', hideForStaffOnly: true },
-            { id: 'survey', label: 'Survey Center', hideForMentees: true, hideForMentors: true },
+            { id: 'survey', label: 'Survey Center', hideForMentees: true },
             { id: 'sessions', label: 'My Sessions', hideForStaffOnly: true, hideForVisitors: true },
             { id: 'resources', label: 'Library' },
             { id: 'whiteboard', label: 'Whiteboard', hideForMentees: true, hideForVisitors: true },
@@ -1287,11 +1287,23 @@ window.renderSessions = function (sessions) {
     if (menteeLinks) menteeLinks.style.display = isMentee ? 'block' : 'none';
 
     if (isMentee && window.DASH_DATA?.profile?.surveys) {
-        const surveys = window.DASH_DATA.profile.surveys;
-        const linkPre = document.getElementById('link-mentee-pre');
-        const linkPost = document.getElementById('link-mentee-post');
-        if (linkPre && surveys.mentee_pre) linkPre.href = surveys.mentee_pre;
-        if (linkPost && surveys.mentee_post) linkPost.href = surveys.mentee_post;
+        const surveys = window.DASH_DATA?.profile?.surveys || {};
+        const backupBox = document.getElementById('mentee-backup-surveys');
+        if (backupBox) {
+            const isMentor = user?.role === 'Mentor';
+            backupBox.style.display = (isMentee || isMentor) ? 'block' : 'none';
+            
+            const linkPre = document.getElementById('link-mentee-pre');
+            const linkPost = document.getElementById('link-mentee-post');
+            
+            if (isMentee) {
+                if (linkPre) { linkPre.href = surveys.mentee_pre || '#'; linkPre.textContent = 'Pre-Session Survey'; }
+                if (linkPost) { linkPost.href = surveys.mentee_post || '#'; linkPost.textContent = 'Post-Session Survey'; }
+            } else if (isMentor) {
+                if (linkPre) { linkPre.href = surveys.mentor_during || '#'; linkPre.textContent = 'During-Session Survey'; }
+                if (linkPost) { linkPost.href = surveys.mentor_post || '#'; linkPost.textContent = 'Post-Session Survey'; }
+            }
+        }
     }
 
     const now = new Date().getTime();

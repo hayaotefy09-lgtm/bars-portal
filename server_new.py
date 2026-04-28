@@ -153,10 +153,10 @@ def handle_dashboard():
         
         gender = str(safe_get(u, ['Gender', 'gender'], '')).replace("'", "").strip()
         survey_links = {
-            "mentee_pre": "survey_mentee_pre2.csv",
-            "mentee_post": "survey_mentee_post2.csv" if gender == "Boy" else "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw9QMQpAEwXBPk9Yk-mW8Ba1UMTZXWjZIRE9ET1pWN05QVzcyUjhPSTZCRS4u",
-            "mentor_post": "survey_mentor_post2.csv",
-            "mentor_during": "survey_mentor_during2.csv"
+            "mentee_pre": "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw_2BXp3VMmxMiX9DbxtNcF1UNFFERFlFRTBSNUEwQ0pWT1NDWlhBRUFPMC4u",
+            "mentee_post": "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw_2BXp3VMmxMiX9DbxtNcF1UMERGNVk0SkY4RkY4RTRMS1E2SU85MVhVSC4u",
+            "mentor_post": "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw5ArmNjQOFNPtxHCG2-Ep6dURVE1WEo3TUFORjg0N0NNWTVNTTNYUDdGNS4u",
+            "mentor_during": "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw5ArmNjQOFNPtxHCG2-Ep6dUNUtZTEEyTU9VNVMyMEoxTjBTQk1KTlVaUC4u"
         }
         
         res["profile"] = {"name": fn_u, "first_name": f_u, "last_name": l_u, "email": u.get('email'), "role": u['role'], "isCounselor": is_c, "gender": gender, "surveys": survey_links}
