@@ -367,13 +367,13 @@ def handle_whiteboard():
             for table in ['whiteboard', 'Whiteboard', 'Notes', 'mentor_notes']:
                 try:
                     supabase_admin.table(table).insert({
-                        "created_by": u['email'], "note_content": note, "category": data.get('category', 'General'), "created_at": datetime.datetime.now().isoformat()
+                        "created_by": u['email'], "note_content": note
                     }).execute()
                     success = True; break
                 except:
                     try:
                         supabase_admin.table(table).insert({
-                            "mentor_name": u['name'], "mentor_email": u['email'], "note": note, "created_at": datetime.datetime.now().isoformat()
+                            "mentor_name": u['name'], "mentor_email": u['email'], "note": note
                         }).execute()
                         success = True; break
                     except: continue
