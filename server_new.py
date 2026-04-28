@@ -419,31 +419,45 @@ def handle_whiteboard():
             return jsonify({"error": "Database link failed."}), 400
     except Exception as e: return jsonify({"error": str(e)}), 500
 
-@app.route('/api/survey/analytics', methods=['GET'])
-def handle_survey_analytics():
-    u = get_user_from_headers()
-    if not u: return jsonify({"error": "Auth Required"}), 401
-    
-    role = normalize_role(u['role'])
-    is_c = u.get('isCounselor') or (u['role'] == 'ProgramStaff' and u['email'] in ['admin@bars.ae', 'counselor@bars.ae'])
-    
-    if role == 'ProgramStaff' and not is_c: return jsonify({"error": "Unauthorized"}), 403
-
     try:
         # Use survey_responses_bars which has role-based data
         resp = supabase_admin.table('survey_responses_bars').select('*').execute()
-        data = resp.data or []
+        raw_data = resp.data or []
         
+        normalized = []
+        for r in raw_data:
+            try:
+                # Normalize for Frontend
+                rs = r.get('responses', '{}')
+                if isinstance(rs, str): rs = json.loads(rs)
+                
+                # Convert dict to array of {q, a} for frontend loop
+                rs_list = []
+                if isinstance(rs, dict):
+                    for q, a in rs.items(): rs_list.append({"q": q, "a": a})
+                else: rs_list = rs
+
+                normalized.append({
+                    "id": r.get('id'),
+                    "name": r.get('user_name'),
+                    "email": r.get('user_email'),
+                    "role": r.get('role'),
+                    "type": r.get('survey_type'),
+                    "timestamp": r.get('timestamp'),
+                    "responses": rs_list
+                })
+            except: continue
+
         # Mentor Filtering: Only see own and mentees' responses
         if role == 'Mentor':
             pairs = safe_fetch(['mentor_mentee_pairs', 'Pairings'])
             mentee_emails = {p['mentee_email'] for p in pairs if p['mentor_email'] == u['email']}
             allowed = {u['email']} | mentee_emails
-            data = [r for r in data if r.get('user_email') in allowed]
+            normalized = [n for n in normalized if n.get('email') in allowed]
         elif role == 'Mentee':
-            data = [r for r in data if r.get('user_email') == u['email']]
+            normalized = [n for n in normalized if n.get('email') == u['email']]
             
-        return jsonify({"surveys": data, "trends": [{"survey": "Brotherhood", "score": 85}]})
+        return jsonify({"surveys": normalized, "trends": [{"survey": "Brotherhood", "score": 85}]})
     except: return jsonify({"surveys": []}), 200
 
 @app.route('/api/survey/submit', methods=['POST'])

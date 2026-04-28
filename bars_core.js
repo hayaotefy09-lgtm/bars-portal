@@ -639,7 +639,8 @@ window.switchSurveyView = function (view) {
 window.renderSurveyCenter = async function () {
     const user = BarsSession.get()?.user;
     if (!user) return;
-    const isStaff = user.role === 'ProgramStaff' || !!user.isCounselor || !!user.is_counselor;
+    const isCounselor = user.isCounselor || (user.role === 'ProgramStaff' && ['admin@bars.ae', 'counselor@bars.ae'].includes(user.email));
+    const isStaff = user.role === 'ProgramStaff' || isCounselor;
     const isMentor = user.role === 'Mentor';
 
     const hub = document.getElementById('mentor-safeguarding-hub');
@@ -943,7 +944,7 @@ window.renderMessages = function (messages) {
             <div class="pair-label" style="color: #64748b; font-size: 0.75rem; font-weight: 800; margin-top: 1.5rem; margin-bottom: 0.5rem; text-transform: uppercase;">MENTOR: ${mentor}</div>
             ${grouped[mentor].map(p => `
                 <div class="mentee-card-yellow" onclick="window.switchChat('${p.pair_id}', '${p.mentee_name}')" style="margin-bottom: 0.75rem; padding: 1rem 1.25rem;">
-                    <div style="background: #000000; color: white; width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem; flex-shrink: 0;">${p.mentee_name.charAt(0)}</div>
+                    <div style="background: linear-gradient(135deg, #FFD700 0%, #DAA520 100%); color: white; width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem; flex-shrink: 0; box-shadow: 0 4px 12px rgba(212, 175, 55, 0.2);">${p.mentee_name.charAt(0)}</div>
                     <div>
                         <div style="font-weight: 800; color: #1e293b; font-size: 1.05rem;">${p.mentee_name}</div>
                         <div style="font-size: 0.8rem; color: #1e293b; font-weight: 600;">${p.mentee_email || p.email || ''}</div>
@@ -966,11 +967,12 @@ window.renderMessages = function (messages) {
         target.innerHTML = pairs.map(p => {
             const name = (user.role === 'Mentor' ? p.mentee_name : p.mentor_name) || p.name;
             const subtext = user.role === 'Mentor' ? (p.mentee_email || '') : (p.mentor_email || '');
-            return `<div class="message-contact-card" onclick="window.switchChat('${p.pair_id}', '${name}')" style="background:#f8fafc; padding:1.2rem; border-radius:20px; border:2px solid #000000; cursor:pointer; margin-bottom:0.8rem; display:flex; align-items:center; gap:1rem;">
-                <div style="background:#000000; color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800;">${name.charAt(0)}</div>
-                <div>
-                   <div style="font-weight:800; color:#000000;">${name}</div>
-                   <div style="font-size: 0.8rem; color: #000000; opacity: 0.8; font-weight: 600;">${subtext}</div>
+            return `<div class="message-contact-card" onclick="window.switchChat('${p.pair_id}', '${name}')" 
+                style="background:#fffbeb; padding:1.2rem; border-radius:24px; border:1px solid rgba(212, 175, 55, 0.15); cursor:pointer; margin-bottom:0.8rem; display:flex; align-items:center; gap:1.25rem; transition:0.3s;">
+                <div style="background: linear-gradient(135deg, #FFD700 0%, #DAA520 100%); color: white; width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem; flex-shrink: 0; box-shadow: 0 4px 12px rgba(212, 175, 55, 0.2);">${name.charAt(0)}</div>
+                <div style="flex:1;">
+                   <div style="font-weight: 800; color: #1e293b; font-size:1.05rem;">${name}</div>
+                   <div style="font-size: 0.8rem; color: #64748b; font-weight: 600;">${subtext}</div>
                 </div>
             </div>`;
         }).join('');
@@ -992,7 +994,8 @@ window.switchChat = function (id, name) {
 
     // Gating for Counselors: Remove send interface (Screenshot 4 request)
     const user = BarsSession.get()?.user;
-    const isStaff = user?.role === 'ProgramStaff' || !!user?.isCounselor || !!user?.is_counselor;
+    const isCounselor = user.isCounselor || (user.role === 'ProgramStaff' && ['admin@bars.ae', 'counselor@bars.ae'].includes(user.email));
+    const isStaff = user.role === 'ProgramStaff' || isCounselor;
     const sendBox = document.getElementById('chat-input-container');
     if (sendBox) sendBox.style.display = isStaff ? 'none' : 'flex';
 
@@ -1365,7 +1368,9 @@ window.renderStaffSessionsSelector = function () {
     const target = document.getElementById('counselor-session-controls');
     if (!target) return;
     const user = BarsSession.get()?.user;
-    if (!user || (user.role !== 'ProgramStaff' && !user.isCounselor && !user.is_counselor)) return;
+    const isCounselor = user.isCounselor || (user.role === 'ProgramStaff' && ['admin@bars.ae', 'counselor@bars.ae'].includes(user.email));
+    const isStaff = user.role === 'ProgramStaff' || isCounselor;
+    if (!user || !isStaff) return;
 
     const pairs = window.DASH_DATA?.pairs || [];
 
