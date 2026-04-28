@@ -15,6 +15,12 @@ from supabase import create_client, Client
 app = Flask(__name__)
 CORS(app)
 
+@app.errorhandler(Exception)
+def handle_exception(e):
+    print(f"[CRITICAL ERROR]: {str(e)}")
+    print(traceback.format_exc())
+    return jsonify({"error": str(e)}), 500
+
 print('BARS Flask Cloud Server Initializing...')
 SUPABASE_URL = os.environ.get('SUPABASE_URL', "https://cojvbregrwqgnzscmmub.supabase.co")
 SUPABASE_KEY = os.environ.get('SUPABASE_ANON_KEY', "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvanZicmVncndxZ256c2NtbXViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5MjYxNDIsImV4cCI6MjA5MjUwMjE0Mn0.QCnDJtL7oYuvL8spFWaMWAxA6DG6u7lMid1a79yqYQI")

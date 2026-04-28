@@ -1786,7 +1786,8 @@ window.renderWhiteboard = async function() {
             headers: { 'Authorization': `Bearer ${BarsSession.get().token}` }
         });
         const notes = await res.json();
-        if (!notes || notes.length === 0) {
+        if (notes.error) throw new Error(notes.error);
+        if (!Array.isArray(notes) || notes.length === 0) {
             container.innerHTML = `<div style="padding:4rem 2rem; text-align:center; background:#fff; border-radius:24px; border:2px dashed #f1f5f9;"><p style="color:#94a3b8; font-weight:600; margin:0;">No notes found.</p></div>`;
             return;
         }
@@ -1820,7 +1821,8 @@ window.renderWhiteboard = async function() {
     } catch (e) { container.innerHTML = `<div style="color:#ef4444; padding:1rem;">Connectivity Error: ${e.message}</div>`; }
 };
 window.submitWhiteboard = async function() {
-    const content = document.getElementById('whiteboard-input')?.value;
+    const input = document.getElementById('whiteboard-input');
+    const content = input?.value;
     if (!content) return;
     try {
         const res = await fetch(`${API_BASE}/api/whiteboard`, {
@@ -1828,6 +1830,12 @@ window.submitWhiteboard = async function() {
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${BarsSession.get().token}` },
             body: JSON.stringify({ content, category: 'General' })
         });
-        if (res.ok) { document.getElementById('whiteboard-input').value = ''; window.renderWhiteboard(); }
-    } catch (e) { alert("❌ Error: " + e.message); }
+        if (res.ok) { 
+            input.value = ''; 
+            window.renderWhiteboard(); 
+        } else {
+            const err = await res.json();
+            alert("❌ Post failed: " + (err.error || "Unknown error"));
+        }
+    } catch (e) { alert("❌ Connectivity Error: " + e.message); }
 };
