@@ -1806,7 +1806,7 @@ window.renderWhiteboard = async function() {
         const inputBox = document.getElementById('whiteboard-input-box');
         if (inputBox) {
             const isMentor = user.role === 'Mentor' || user.role === 'mentor';
-            inputBox.style.display = (isMentor || isCounselor) ? 'flex' : 'none';
+            inputBox.style.display = isMentor ? 'flex' : 'none';
         }
 
         if (!Array.isArray(notes) || notes.length === 0) {
