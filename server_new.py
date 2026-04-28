@@ -173,7 +173,9 @@ def handle_dashboard():
                 fn_m, _, _ = format_user_name(m); fn_s, _, _ = format_user_name(s)
                 res["pairs"].append({"mentor_name": fn_m, "mentee_name": fn_s, "pair_id": p_id, "mentor_email": m_email, "mentee_email": s_email})
         
-            # Normalize Sessions for Frontend Parity
+        # Normalize Sessions for Frontend Parity
+        sessions_normalized = []
+        for s in sessions_data:
             m_e = safe_get(s, ['mentor_email', 'mentorEmail'])
             s_e = safe_get(s, ['mentee_email', 'menteeEmail'])
             
@@ -202,6 +204,7 @@ def handle_dashboard():
                 "partner_name": partner_name,
                 "scheduled_by": sched_by
             })
+        res["sessions"] = sessions_normalized
             
         res["resources"] = resources_data
         res["sessions"] = sessions_normalized
