@@ -341,7 +341,7 @@ def handle_whiteboard():
             for table in ['whiteboard', 'Whiteboard', 'Notes', 'mentor_notes']:
                 try:
                     query = supabase_admin.table(table).select('*')
-                    if role == 'Mentor': query = query.eq('mentor_email', u['email'])
+                    # if role == 'Mentor': query = query.eq('mentor_email', u['email']) # Temporarily disable filter to see if it works
                     resp = None
                     try: resp = query.order('created_at', desc=True).execute()
                     except: resp = query.order('last_updated', desc=True).execute()
@@ -349,13 +349,13 @@ def handle_whiteboard():
                         out = []
                         for row in resp.data:
                             m_name = row.get('mentor_name')
-                            if not m_name and row.get('mentor_email') == u['email']: m_name = u['name']
+                            if not m_name and (row.get('mentor_email') == u['email'] or row.get('created_by') == u['email']): m_name = u['name']
                             out.append({
                                 'id': row.get('id'),
-                                'note': row.get('note') or row.get('content'),
+                                'note': row.get('note_content') or row.get('note') or row.get('content'),
                                 'created_at': row.get('created_at') or row.get('last_updated'),
-                                'mentor_email': row.get('mentor_email'),
-                                'mentor_name': m_name or 'Unknown'
+                                'mentor_email': row.get('created_by') or row.get('mentor_email'),
+                                'mentor_name': m_name or row.get('created_by') or 'Unknown'
                             })
                         return jsonify(out)
                 except: continue
@@ -367,13 +367,13 @@ def handle_whiteboard():
             for table in ['whiteboard', 'Whiteboard', 'Notes', 'mentor_notes']:
                 try:
                     supabase_admin.table(table).insert({
-                        "mentor_name": u['name'], "mentor_email": u['email'], "note": note, "created_at": datetime.datetime.now().isoformat()
+                        "created_by": u['email'], "note_content": note, "category": data.get('category', 'General'), "created_at": datetime.datetime.now().isoformat()
                     }).execute()
                     success = True; break
                 except:
                     try:
                         supabase_admin.table(table).insert({
-                            "mentor_email": u['email'], "content": note, "last_updated": datetime.datetime.now().isoformat()
+                            "mentor_name": u['name'], "mentor_email": u['email'], "note": note, "created_at": datetime.datetime.now().isoformat()
                         }).execute()
                         success = True; break
                     except: continue
