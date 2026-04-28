@@ -1358,11 +1358,19 @@ window.renderSessions = function (sessions) {
                 ${attribution}
                 ${lockNote}
             </div>
-            <div style="display:flex; align-items:center; gap:0.5rem;">
+            <div style="display:flex; align-items:center; gap:1rem;">
                 ${canTrash ? `
-                <button onclick="window.trashSession('${s.id}', this)" data-action="trash-session" data-id="${s.id}" title="Cancel Session" style="background: #fffbeb; border: none; padding: 0.6rem; border-radius: 12px; cursor: pointer; color: #D4AF37; display: flex; align-items: center; justify-content: center;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                </button>` : ''}
+                    <button onclick="window.trashSession('${s.id}', this)" 
+                        style="background: #fee2e2; color: #ef4444; border: none; width: 45px; height: 45px; border-radius: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;"
+                        onmouseover="this.style.background='#fecaca'" onmouseout="this.style.background='#fee2e2'">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            <line x1="10" y1="11" x2="10" y2="17"></line>
+                            <line x1="14" y1="11" x2="14" y2="17"></line>
+                        </svg>
+                    </button>
+                ` : ''}
                 ${preSurveyBtn}
                 ${linkActionHtml}
             </div>
@@ -1787,14 +1795,11 @@ window.renderWhiteboard = async function() {
         });
         const notes = await res.json();
         if (notes.error) throw new Error(notes.error);
-        if (!Array.isArray(notes) || notes.length === 0) {
-            container.innerHTML = `<div style="padding:4rem 2rem; text-align:center; background:#fff; border-radius:24px; border:2px dashed #f1f5f9;"><p style="color:#94a3b8; font-weight:600; margin:0;">No notes found.</p></div>`;
-            return;
-        }
-        const user = BarsSession.get().user;
+        
+        const user = BarsSession.get()?.user;
+        if (!user) return;
         const isCounselor = user.role === 'Counselor' || user.role === 'counselor' || !!user.isCounselor;
-        const isMaster = user.role === 'ProgramStaff' || isCounselor;
-
+        
         // PERMISSION CHECK: Show input box for Mentors and Counselors
         const inputBox = document.getElementById('whiteboard-input-box');
         if (inputBox) {
@@ -1802,8 +1807,14 @@ window.renderWhiteboard = async function() {
             inputBox.style.display = (isMentor || isCounselor) ? 'flex' : 'none';
         }
 
+        if (!Array.isArray(notes) || notes.length === 0) {
+            container.innerHTML = `<div style="padding:4rem 2rem; text-align:center; background:#fff; border-radius:24px; border:2px dashed #f1f5f9;"><p style="color:#94a3b8; font-weight:600; margin:0;">No notes found.</p></div>`;
+            return;
+        }
+
+        const isMaster = user.role === 'ProgramStaff' || isCounselor;
         container.innerHTML = notes.map(n => `
-            <div class="resource-card" style="margin-bottom:1.5rem; background:white; padding:1.5rem; border-radius:20px; border:1.5px solid #f1f5f9;">
+            <div style="background:white; border-radius:20px; padding:1.5rem; border:1.5px solid #f1f5f9; box-shadow:0 4px 15px rgba(0,0,0,0.02); display:flex; flex-direction:column; gap:1rem;">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1rem;">
                     <span style="font-size:0.65rem; font-weight:800; color:#D4AF37; text-transform:uppercase; background:#fffbeb; padding:0.4rem 0.8rem; border-radius:8px;">Mentor Note</span>
                     <span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">${n.created_at ? new Date(n.created_at).toLocaleDateString() : 'Recent'}</span>
