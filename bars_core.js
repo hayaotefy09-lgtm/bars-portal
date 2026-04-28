@@ -648,6 +648,11 @@ window.renderSurveyCenter = async function () {
     const surveySection = document.getElementById('survey');
 
     if (hub) hub.style.display = isMentor ? 'block' : 'none';
+    const isStaffOnly = user.role === 'ProgramStaff' && !isCounselor;
+    if (isStaffOnly) {
+        const surveySection = document.getElementById('survey');
+        if (surveySection) surveySection.innerHTML = `<div style="padding:4rem; text-align:center;"><h3>Access Restricted</h3><p>Program Staff do not have access to the Survey Center.</p></div>`;
+    }
     if (backup) backup.style.display = isMentor ? 'block' : 'none';
     if (toggle) toggle.style.display = isStaff ? 'flex' : 'none';
 
@@ -1021,7 +1026,7 @@ window.syncChat = async function () {
     const body = document.getElementById('chat-body-content');
     if (body) {
         const u = BarsSession.get().user;
-        const isCounselor = !!u.isCounselor || !!u.is_counselor || u.role === 'ProgramStaff';
+        const isCounselor = u.isCounselor || (u.role === 'ProgramStaff' && ['admin@bars.ae', 'counselor@bars.ae'].includes(u.email));
 
         // Find the current pair to identify mentor/mentee roles for counselor view
         const currentPair = window.DASH_DATA?.pairs?.find(p => String(p.pair_id) === String(window.CURRENT_CHAT_PAIR));
@@ -1317,45 +1322,15 @@ window.renderSessions = function (sessions) {
     list.innerHTML = filtered.map(s => {
         const isScheduler = s.scheduled_by === user.email;
         const isCounselor = !!user.isCounselor || !!user.is_counselor;
-        const isMentorForStaffSession = (s.scheduler_role === 'ProgramStaff' || s.scheduler_role === 'Counselor') && user.role === 'Mentor';
+        
+        // Trash shows only for the person who scheduled
+        const canTrash = isScheduler || (isCounselor && !s.scheduled_by);
 
-        // Final Parity Visibility for Trash Icon
-        const isMentor = user.role === 'Mentor' || user.role === 'mentor';
-        const isParticipantMentor = isMentor && s.mentor_email === user.email;
-        const canTrash = isScheduler || isCounselor || isMentorForStaffSession || isParticipantMentor;
-
-        // JOIN LOCK LOGIC (Mentees only)
-        // Link remains inactive until they click the Pre-Session survey link
-        const isJoinLocked = isMentee && !(window.SURVEY_CLICKS && window.SURVEY_CLICKS[s.id]);
-        const joinBtnStyle = isJoinLocked ? 'opacity:0.5; pointer-events:none; filter:grayscale(1);' : '';
-        const lockNote = isJoinLocked ? `<div style="font-size:0.65rem; color:#ef4444; font-weight:800; margin-top:0.3rem;">LOCKED: Complete Pre-Survey first</div>` : '';
-
-        // MENTEE PRE-SURVEY LINK (Required for unlock)
-        const PRE_SURVEY_URL = "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw9QMQpAEwXBPk9Yk-mW8Ba1UMTZXWjZIRE9ET1pWN05QVzcyUjhPSTZCRS4u";
-        const preSurveyBtn = isMentee && isJoinLocked
-            ? `<a href="${PRE_SURVEY_URL}" target="_blank" onclick="window.unlockSessionJoin('${s.id}')" class="btn-white" style="text-decoration:none; padding:0.6rem 1rem; border-radius:12px; font-size:0.75rem; border:1px solid rgba(212, 175, 55, 0.15); color:#D4AF37; font-weight:800;">1. Open Pre-Survey</a>`
-            : '';
-
-        const attribution = (s.scheduler_role === 'ProgramStaff' || s.scheduler_role === 'Counselor')
-            ? `<div style="font-size: 0.7rem; color: #D4AF37; font-weight: 800; text-transform: uppercase; margin-top: 0.2rem;">Scheduled by Counselor ${s.scheduler_name || 'Staff'}</div>`
-            : '';
-
-        // Meeting Link Visualization
-        let linkActionHtml = `<a href="${s.meeting_link}" target="_blank" class="btn-black-gold" 
-                               style="text-decoration:none; padding:0.6rem 1.2rem; border-radius:12px; ${joinBtnStyle}">Join Call</a>`;
-
-        if (!isJoinLocked && s.meeting_link) {
-            linkActionHtml = `
-                <div style="display:flex; flex-direction:column; gap:0.5rem; align-items:center;">
-                    <a href="${s.meeting_link}" target="_blank" class="btn-black-gold" style="text-decoration:none; padding:0.8rem 1.5rem; border-radius:12px; font-weight:800; width:100%; text-align:center;">ENTER MEETING LINK</a>
-                    <div style="font-size:0.65rem; color:#22c55e; font-weight:800;">✓ ACCESS UNLOCKED</div>
-                </div>
-            `;
-        }
-
+        const timeStr = new Date(s.start_time).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true, month: 'short', day: 'numeric', year: 'numeric' });
+        
         return `<div style="background:white; border-radius:20px; padding:1.5rem; border:1.5px solid rgba(212, 175, 55, 0.15); margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center;">
             <div style="flex: 1;">
-                <div style="font-weight:800; color:#D4AF37;">${new Date(s.start_time).toLocaleString()}</div>
+                <div style="font-weight:800; color:#D4AF37;">${timeStr}</div>
                 <div style="font-size:0.8rem; color:#64748b; font-weight: 600;">${s.partner_name || 'Partner'}</div>
                 ${attribution}
                 ${lockNote}
@@ -1426,20 +1401,26 @@ window.renderMentors = (mentors, targetId) => {
 
     g.innerHTML = `<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; width: 100%;">` +
         // Mentors: Horizontal layout with pink bubble avatar and status text
-        mentors.map(m => `
-        <div class="mentor-horizontal-card" onclick="window.viewMentorProfile('${m.email}')" 
-             style="background: white; border: 1.5px solid #f1f5f9; border-radius: 20px; padding: 1.25rem 1.5rem; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: 0.2s;">
-            <div style="display: flex; align-items: center; gap: 1.25rem;">
-                <div style="background: linear-gradient(135deg, #FFD700 0%, #DAA520 100%); color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem; flex-shrink: 0;">${m.name.charAt(0)}${m.name.split(' ').length > 1 ? m.name.split(' ')[1].charAt(0) : ''}</div>
-                <div>
-                    <div style="font-weight: 800; color: #1e293b; font-size: 1.05rem; line-height: 1.2;">${m.name}</div>
-                    <div style="font-size: 0.75rem; color: #000000; font-weight: 700; margin-top: 0.15rem;">${m.email}</div>
-                    <div style="font-size: 0.8rem; color: #D4AF37; font-weight: 700; margin-top: 0.15rem; text-decoration: none;">View Profile</div>
+        mentors.map(m => {
+            const statusColor = m.status === 'Paired' ? '#eab308' : '#22c55e'; // Yellow vs Green
+            return `
+            <div class="mentor-horizontal-card" onclick="window.viewMentorProfile('${m.email}')" 
+                 style="background: white; border: 1.5px solid #f1f5f9; border-radius: 20px; padding: 1.25rem 1.5rem; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: 0.2s;">
+                <div style="display: flex; align-items: center; gap: 1.25rem;">
+                    <div style="background: linear-gradient(135deg, #FFD700 0%, #DAA520 100%); color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem; flex-shrink: 0;">${m.name.charAt(0)}${m.name.split(' ').length > 1 ? m.name.split(' ')[1].charAt(0) : ''}</div>
+                    <div>
+                        <div style="font-weight: 800; color: #1e293b; font-size: 1.05rem; line-height: 1.2; display:flex; align-items:center; gap:0.5rem;">
+                            ${m.name}
+                            <span style="font-size:0.55rem; padding:0.2rem 0.5rem; border-radius:6px; background:${statusColor}15; color:${statusColor}; text-transform:uppercase; letter-spacing:0.5px;">${m.status || 'Available'}</span>
+                        </div>
+                        <div style="font-size: 0.75rem; color: #64748b; font-weight: 600; margin-top: 0.15rem;">${m.email}</div>
+                        <div style="font-size: 0.8rem; color: #D4AF37; font-weight: 700; margin-top: 0.15rem; text-decoration: none;">View Profile</div>
+                    </div>
                 </div>
+                <div style="color: ${statusColor}; font-weight: 800; font-size: 0.8rem; letter-spacing: 0.3px;">${m.status || 'Available'}</div>
             </div>
-            <div style="color: #16a34a; font-weight: 800; font-size: 0.8rem; letter-spacing: 0.3px;">Available</div>
-        </div>
-    `).join('') + `</div>`;
+            `;
+        }).join('') + `</div>`;
 };
 
 window.filterMentors = () => {

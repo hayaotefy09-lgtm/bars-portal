@@ -124,20 +124,42 @@ def handle_dashboard():
             parts = fn.split(' ', 1); f_name = parts[0] if len(parts) > 0 else fn; l_name = parts[1] if len(parts) > 1 else ""
             return fn, f_name, l_name
 
+        # Populate initial mentor list
         for email, usr in users_map.items():
             if not email: continue
             role = normalize_role(safe_get(usr, ['role', 'user_role']))
             if role == 'Mentor':
                 fn, f_name, l_name = format_user_name(usr)
                 res["mentors"].append({"name": fn, "first_name": f_name, "last_name": l_name, "email": email, "bio": safe_get(usr, ['bio']), "interests": safe_get(usr, ['interests'])})
+
+        # 1. Mentor Visibility Rules
+        paired_mentor_emails = {safe_get(p, ['mentor_email', 'mentorEmail']) for p in pairs_data if safe_get(p, ['mentor_email', 'mentorEmail'])}
+        mentors_filtered = []
+        cur_role = normalize_role(u['role'])
         
+        # Mentees see ONLY their assigned mentor
+        my_mentor_email = None
+        if cur_role == 'Mentee':
+            for p in pairs_data:
+                if safe_get(p, ['mentee_email', 'menteeEmail']) == u['email']:
+                    my_mentor_email = safe_get(p, ['mentor_email', 'mentorEmail'])
+                    break
+
+        for m in res["mentors"]:
+            m_email = m.get('email')
+            if cur_role == 'Mentee' and m_email != my_mentor_email: continue
+            
+            # Add Paired/Available Status
+            m["status"] = "Paired" if m_email in paired_mentor_emails else "Available"
+            mentors_filtered.append(m)
+        res["mentors"] = mentors_filtered
+
         for p in pairs_data:
             m_email = safe_get(p, ['mentor_email', 'mentorEmail', 'mentor'])
             s_email = safe_get(p, ['mentee_email', 'menteeEmail', 'mentee'])
             if not m_email or not s_email: continue
             p_id = safe_get(p, ['id', 'pair_id'])
             
-            cur_role = normalize_role(u['role'])
             if cur_role == 'Mentor' and m_email == u['email']:
                 uu = users_map.get(s_email, {})
                 fn, f_name, l_name = format_user_name(uu)
@@ -146,17 +168,22 @@ def handle_dashboard():
                 uu = users_map.get(m_email, {})
                 fn, f_name, l_name = format_user_name(uu)
                 res["pairs"].append({"name": fn, "first_name": f_name, "last_name": l_name, "email": m_email, "pair_id": p_id, "type": "Mentor", "bio": safe_get(uu, ['bio']), "interests": safe_get(uu, ['interests'])})
-            elif cur_role == 'ProgramStaff':
+            elif cur_role == 'ProgramStaff' or is_c: # Counselors see pairs too
                 m = users_map.get(m_email, {}); s = users_map.get(s_email, {})
                 fn_m, _, _ = format_user_name(m); fn_s, _, _ = format_user_name(s)
                 res["pairs"].append({"mentor_name": fn_m, "mentee_name": fn_s, "pair_id": p_id, "mentor_email": m_email, "mentee_email": s_email})
         
-        # Normalize Sessions for Frontend Parity
-        sessions_raw = safe_fetch(['sessions', 'Sessions', 'Events'])
-        sessions_normalized = []
-        for s in sessions_raw:
+            # Normalize Sessions for Frontend Parity
             m_e = safe_get(s, ['mentor_email', 'mentorEmail'])
             s_e = safe_get(s, ['mentee_email', 'menteeEmail'])
+            
+            # Extract Scheduler from notes if present: [SCHEDULER:email]
+            raw_notes = s.get('notes', '')
+            sched_by = None
+            if '[SCHEDULER:' in str(raw_notes):
+                try: sched_by = str(raw_notes).split('[SCHEDULER:')[1].split(']')[0]
+                except: pass
+            
             partner_name = "Partner"
             if u['email'] == m_e:
                 p_u = users_map.get(s_e, {})
@@ -172,7 +199,8 @@ def handle_dashboard():
                 "status": s.get('status', 'Scheduled'),
                 "mentor_email": m_e,
                 "mentee_email": s_e,
-                "partner_name": partner_name
+                "partner_name": partner_name,
+                "scheduled_by": sched_by
             })
             
         res["resources"] = resources_data
@@ -314,12 +342,19 @@ def handle_messages():
     u = get_user_from_headers()
     if not u: return jsonify({"error": "Auth Required"}), 401
     try:
+        role = normalize_role(u['role'])
+        is_c = u.get('isCounselor') or (u['role'] == 'ProgramStaff' and u['email'] in ['admin@bars.ae', 'counselor@bars.ae'])
+        
         if request.method == 'GET':
+            if role == 'ProgramStaff' and not is_c: return jsonify({"error": "Unauthorized"}), 403
             pid = request.args.get('pair_id'); q = None
             for table in ['messages', 'Messages', 'Chats']:
                 try:
                     q = supabase_admin.table(table).select('*')
-                    if pid: q = q.eq('pair_id', pid)
+                    if not is_c: # Regular users only see their own chats
+                        if pid: q = q.eq('pair_id', pid)
+                        else: q = q.or_(f"sender_email.eq.{u['email']},recipient_email.eq.{u['email']}")
+                    
                     resp = q.order('timestamp', desc=False).execute()
                     if resp.data is not None:
                         return jsonify([{"sender": safe_get(r, ['sender_email', 'sender']), "message": safe_get(r, ['message', 'text']), "time": safe_get(r, ['timestamp', 'time'])} for r in resp.data])
@@ -385,9 +420,27 @@ def handle_whiteboard():
 def handle_survey_analytics():
     u = get_user_from_headers()
     if not u: return jsonify({"error": "Auth Required"}), 401
+    
+    role = normalize_role(u['role'])
+    is_c = u.get('isCounselor') or (u['role'] == 'ProgramStaff' and u['email'] in ['admin@bars.ae', 'counselor@bars.ae'])
+    
+    if role == 'ProgramStaff' and not is_c: return jsonify({"error": "Unauthorized"}), 403
+
     try:
-        resp = supabase_admin.table('surveys').select('*').execute()
-        return jsonify({"surveys": resp.data or [], "trends": [{"survey": "Brotherhood", "score": 85}]})
+        # Use survey_responses_bars which has role-based data
+        resp = supabase_admin.table('survey_responses_bars').select('*').execute()
+        data = resp.data or []
+        
+        # Mentor Filtering: Only see own and mentees' responses
+        if role == 'Mentor':
+            pairs = safe_fetch(['mentor_mentee_pairs', 'Pairings'])
+            mentee_emails = {p['mentee_email'] for p in pairs if p['mentor_email'] == u['email']}
+            allowed = {u['email']} | mentee_emails
+            data = [r for r in data if r.get('user_email') in allowed]
+        elif role == 'Mentee':
+            data = [r for r in data if r.get('user_email') == u['email']]
+            
+        return jsonify({"surveys": data, "trends": [{"survey": "Brotherhood", "score": 85}]})
     except: return jsonify({"surveys": []}), 200
 
 @app.route('/api/survey/submit', methods=['POST'])
@@ -546,7 +599,9 @@ def handle_session_schedule():
         
         session_data = {
             "mentor_email": m_e, "mentee_email": s_e,
-            "session_date": start, "notes": link or "", "status": "Scheduled"
+            "session_date": start, 
+            "notes": f"[SCHEDULER:{u['email']}] {link or ''}", 
+            "status": "Scheduled"
         }
         
         success = False; err_msg = ""
