@@ -379,6 +379,18 @@ def register():
     try:
         data = request.get_json(); email, fn, ln, pw, role = data.get('email', '').lower().strip(), data.get('firstName', ''), data.get('lastName', ''), data.get('password', ''), data.get('role', 'Mentee')
         full_name = f"{fn} {ln}".strip()
+        
+        # Rule: Check if user already exists to avoid DB unique constraint errors
+        existing = False
+        for table in ['users', 'profiles', 'Registry']:
+            try:
+                r = supabase_admin.table(table).select('email').eq('email', email).execute()
+                if r.data: existing = True; break
+            except: continue
+            
+        if existing:
+            return jsonify({"status": "error", "message": "Account already exists. Please use the Login tab."}), 400
+
         supabase_admin.table('users').insert({"id": str(uuid.uuid4()), "email": email, "full_name": full_name, "password": pw, "role": role, "bio": "", "interests": ""}).execute()
         return jsonify({"status": "success", "message": "Account created! You can now log in."}), 200
     except Exception as e: return jsonify({"status": "error", "message": str(e)}), 500
