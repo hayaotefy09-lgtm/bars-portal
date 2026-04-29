@@ -204,6 +204,12 @@ def handle_dashboard():
             raw_notes = str(s.get('notes', ''))
             sched_by = raw_notes.split('[SCHEDULER:')[1].split(']')[0] if '[SCHEDULER:' in raw_notes else None
             
+            # Resolve Scheduler Name
+            sched_by_name = "Unknown"
+            if sched_by:
+                sched_u = users_map.get(sched_by, {})
+                sched_by_name, _, _ = format_user_name(sched_u)
+            
             # Partner Resolution
             partner_name = "Partner"
             p_email = s_e if u['email'] == m_e else (m_e if u['email'] == s_e else None)
@@ -211,13 +217,20 @@ def handle_dashboard():
                 p_u = users_map.get(p_email, {})
                 partner_name, _, _ = format_user_name(p_u)
             
+            # Full Party Resolution
+            fn_mentor, _, _ = format_user_name(users_map.get(m_e, {}))
+            fn_mentee, _, _ = format_user_name(users_map.get(s_e, {}))
+            
             sessions_normalized.append({
                 "id": s.get('id'),
                 "start_time": s.get('session_date') or s.get('start_time'),
                 "meeting_link": s.get('notes') or s.get('meeting_link') or s.get('link'),
                 "status": s.get('status', 'Scheduled'),
                 "partner_name": partner_name,
-                "scheduled_by": sched_by
+                "mentor_name": fn_mentor,
+                "mentee_name": fn_mentee,
+                "scheduled_by": sched_by,
+                "scheduled_by_name": sched_by_name
             })
         res["sessions"] = sessions_normalized
         res["resources"] = resources_data

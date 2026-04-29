@@ -1342,9 +1342,19 @@ window.renderSessions = function (sessions) {
         const canTrash = isScheduler || (isCounselor && !s.scheduled_by);
 
         const timeStr = new Date(s.start_time).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true, month: 'short', day: 'numeric', year: 'numeric' });
+        const isStaff = user.role === 'ProgramStaff' || !!user.isCounselor || !!user.is_counselor;
+        const attribution = s.scheduled_by ? `<div style="font-size:0.65rem; color:#94a3b8; margin-top:0.2rem; text-transform:uppercase; font-weight:800;">${s.scheduled_by === user.email ? 'Scheduled by You' : 'Scheduled by ' + (s.scheduled_by_name || 'Partner')}</div>` : '';
         
-        const attribution = s.scheduled_by ? `<div style="font-size:0.65rem; color:#94a3b8; margin-top:0.2rem; text-transform:uppercase; font-weight:800;">${s.scheduled_by === user.email ? 'Scheduled by You' : 'Scheduled by Partner'}</div>` : '';
-        
+        let participantInfo = `<div style="font-size:0.8rem; color:#64748b; font-weight: 600;">${s.partner_name || 'Partner'}</div>`;
+        if (isStaff) {
+            participantInfo = `
+                <div style="font-size:0.8rem; color:#64748b; font-weight: 700;">
+                    <span style="color:#D4AF37;">Mentor:</span> ${s.mentor_name || 'Unassigned'} <br/>
+                    <span style="color:#D4AF37;">Mentee:</span> ${s.mentee_name || 'Unassigned'}
+                </div>
+            `;
+        }
+
         const hasClickedPre = window.SURVEY_CLICKS?.[s.id] || false;
         const lockNote = !hasClickedPre && s.meeting_link ? `<div style="font-size:0.7rem; color:#ef4444; font-weight:700; margin-top:0.3rem;">⚠️ Fill survey to unlock link</div>` : '';
 
@@ -1362,7 +1372,7 @@ window.renderSessions = function (sessions) {
         return `<div style="background:white; border-radius:20px; padding:1.5rem; border:1.5px solid rgba(212, 175, 55, 0.15); margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center;">
             <div style="flex: 1;">
                 <div style="font-weight:800; color:#D4AF37;">${timeStr}</div>
-                <div style="font-size:0.8rem; color:#64748b; font-weight: 600;">${s.partner_name || 'Partner'}</div>
+                ${participantInfo}
                 ${attribution}
                 ${lockNote}
             </div>
