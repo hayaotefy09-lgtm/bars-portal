@@ -1138,6 +1138,13 @@ window.addEventListener('load', () => {
 
 // Bindings
 window.openScheduleModal = (name, pairId) => {
+    // Proactive ID Discovery: If missing, find first pairing in state
+    if (!pairId && window.DASH_DATA?.pairs?.length > 0) {
+        const p = window.DASH_DATA.pairs[0];
+        pairId = p.pair_id || p.id;
+        name = p.name || p.partner_name || p.mentor_name || p.mentee_name || "Partner";
+    }
+    
     document.getElementById('schedule-modal-overlay').style.display = 'flex';
     window.SELECTED_SCHEDULE_PAIR_ID = pairId;
     window.SELECTED_PARTNER_NAME = name;
