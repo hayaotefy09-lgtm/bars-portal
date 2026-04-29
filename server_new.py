@@ -340,8 +340,15 @@ def admin_data():
 def admin_create():
     if request.headers.get('X-Admin-Bypass') != 'BARS2026': return jsonify({"error": "Unauthorized"}), 401
     try:
-        data = request.get_json(); email, fn, ln, role = data.get('email', '').lower().strip(), data.get('firstName', ''), data.get('lastName', ''), data.get('role', 'Mentee')
-        full_name = f"{fn} {ln}".strip()
+        # Rule: Check if user already exists
+        existing = False
+        for table in ['users', 'profiles', 'Registry']:
+            try:
+                r = supabase_admin.table(table).select('email').eq('email', email).execute()
+                if r.data: existing = True; break
+            except: continue
+        if existing: return jsonify({"error": "User already exists."}), 400
+
         supabase_admin.table('users').insert({"email": email, "full_name": full_name, "role": role, "password": "bars"}).execute()
         return jsonify({"success": True})
     except Exception as e: 
@@ -357,6 +364,10 @@ def admin_pair():
         success = False; err_msg = ""
         for table in ['mentor_mentee_pairs', 'mentormenteepair', 'MentorMenteePair', 'Pairings']:
             try:
+                # Rule: Check if pairing already exists
+                check = supabase_admin.table(table).select('*').eq('mentor_email', m).eq('mentee_email', s).execute()
+                if check.data: success = True; break 
+                
                 supabase_admin.table(table).insert({"mentor_email": m, "mentee_email": s}).execute()
                 success = True; break
             except Exception as e: err_msg = str(e); continue
