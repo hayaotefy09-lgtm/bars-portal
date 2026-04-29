@@ -1338,6 +1338,22 @@ window.renderSessions = function (sessions) {
 
         const timeStr = new Date(s.start_time).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true, month: 'short', day: 'numeric', year: 'numeric' });
         
+        const attribution = s.scheduled_by ? `<div style="font-size:0.65rem; color:#94a3b8; margin-top:0.2rem; text-transform:uppercase; font-weight:800;">${s.scheduled_by === user.email ? 'Scheduled by You' : 'Scheduled by Partner'}</div>` : '';
+        
+        const hasClickedPre = window.SURVEY_CLICKS?.[s.id] || false;
+        const lockNote = !hasClickedPre && s.meeting_link ? `<div style="font-size:0.7rem; color:#ef4444; font-weight:700; margin-top:0.3rem;">⚠️ Fill survey to unlock link</div>` : '';
+
+        const preSurveyBtn = `<button onclick="window.unlockSessionJoin('${s.id}')" class="btn-black-gold" style="padding:0.7rem 1.2rem; border-radius:12px; font-size:0.85rem;">1. Survey</button>`;
+        
+        let linkActionHtml = '';
+        if (s.meeting_link) {
+            if (hasClickedPre) {
+                linkActionHtml = `<a href="${s.meeting_link}" target="_blank" class="btn-black-gold" style="background:#D4AF37; border-color:#D4AF37; padding:0.7rem 1.2rem; border-radius:12px; font-size:0.85rem; text-decoration:none;">2. Join Session</a>`;
+            } else {
+                linkActionHtml = `<button disabled style="background:#f1f5f9; color:#94a3b8; border:none; padding:0.7rem 1.2rem; border-radius:12px; font-size:0.85rem; cursor:not-allowed;">2. Join Locked</button>`;
+            }
+        }
+
         return `<div style="background:white; border-radius:20px; padding:1.5rem; border:1.5px solid rgba(212, 175, 55, 0.15); margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center;">
             <div style="flex: 1;">
                 <div style="font-weight:800; color:#D4AF37;">${timeStr}</div>
