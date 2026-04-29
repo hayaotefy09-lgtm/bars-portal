@@ -604,12 +604,19 @@ def handle_session_schedule():
         
         pair = None
         for table in ['mentor_mentee_pairs', 'mentormenteepair', 'MentorMenteePair', 'Pairings']:
-            try:
-                r = supabase_admin.table(table).select('*').eq('id', pid).execute()
-                if r.data: pair = r.data[0]; break
-            except: continue
+            if pair: break
+            for col in ['id', 'pair_id']:
+                try:
+                    # Try raw string
+                    r = supabase_admin.table(table).select('*').eq(col, pid).execute()
+                    if r.data: pair = r.data[0]; break
+                    # Try integer if numeric
+                    if str(pid).isdigit():
+                        r = supabase_admin.table(table).select('*').eq(col, int(pid)).execute()
+                        if r.data: pair = r.data[0]; break
+                except: continue
         
-        if not pair: return jsonify({"error": "Pairing not found"}), 404
+        if not pair: return jsonify({"error": f"Pairing not found for ID: {pid}"}), 404
         
         m_e = pair.get('mentor_email')
         s_e = pair.get('mentee_email')
