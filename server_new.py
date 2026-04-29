@@ -146,23 +146,34 @@ def handle_dashboard():
 
         # 4. Process Pairings (Role-based)
         for p in pairs_data:
-            m_e = safe_get(p, ['mentor_email', 'mentorEmail'])
-            s_e = safe_get(p, ['mentee_email', 'menteeEmail'])
+            m_e = (safe_get(p, ['mentor_email', 'mentorEmail']) or "").lower().strip()
+            s_e = (safe_get(p, ['mentee_email', 'menteeEmail']) or "").lower().strip()
             p_id = safe_get(p, ['id', 'pair_id'])
+            
             if role == 'ProgramStaff' or is_counselor or u['email'] in [m_e, s_e]:
                 m_u = users_map.get(m_e, {}); s_u = users_map.get(s_e, {})
                 fn_m, _, _ = format_user_name(m_u); fn_s, _, _ = format_user_name(s_u)
-                res["pairs"].append({
+                
+                pair_obj = {
                     "pair_id": p_id, "mentor_name": fn_m, "mentee_name": fn_s, 
                     "mentor_email": m_e, "mentee_email": s_e
-                })
+                }
+                
+                # Add parity fields for Student View
+                if role == 'Mentor' and u['email'] == m_e:
+                    pair_obj.update({"name": fn_s, "email": s_e, "type": "Mentee"})
+                elif role == 'Mentee' and u['email'] == s_e:
+                    pair_obj.update({"name": fn_m, "email": m_e, "type": "Mentor"})
+                
+                res["pairs"].append(pair_obj)
 
         # 5. Process & Normalize Sessions
+        u_email = u['email'].lower().strip()
         sessions_filtered = []
         if role == 'Mentor':
-            sessions_filtered = [s for s in sessions_raw if safe_get(s, ['mentor_email', 'mentorEmail']) == u['email']]
+            sessions_filtered = [s for s in sessions_raw if (safe_get(s, ['mentor_email', 'mentorEmail']) or "").lower().strip() == u_email]
         elif role == 'Mentee':
-            sessions_filtered = [s for s in sessions_raw if safe_get(s, ['mentee_email', 'menteeEmail']) == u['email']]
+            sessions_filtered = [s for s in sessions_raw if (safe_get(s, ['mentee_email', 'menteeEmail']) or "").lower().strip() == u_email]
         elif is_counselor:
             sessions_filtered = sessions_raw
         else: # Regular staff: hide counselor sessions
