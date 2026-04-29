@@ -1139,7 +1139,7 @@ window.addEventListener('load', () => {
 // Bindings
 window.openScheduleModal = (name, pairId) => {
     document.getElementById('schedule-modal-overlay').style.display = 'flex';
-    window.SELECTED_PAIR_ID = pairId;
+    window.SELECTED_SCHEDULE_PAIR_ID = pairId;
     window.SELECTED_PARTNER_NAME = name;
 
     const modalNameEl = document.getElementById('selected-partner-name');
