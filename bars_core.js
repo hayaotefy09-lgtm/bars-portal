@@ -1151,6 +1151,12 @@ window.openScheduleModal = (name, pairId) => {
         name = p.name || p.partner_name || p.mentor_name || p.mentee_name || "Partner";
     }
     
+    // Rule: Counselors see the 'Include Mentor' checkbox
+    const user = BarsSession.get()?.user;
+    const isCounselor = !!user?.isCounselor || !!user?.is_counselor;
+    const mentorOpt = document.getElementById('counselor-mentor-opt');
+    if (mentorOpt) mentorOpt.style.display = isCounselor ? 'block' : 'none';
+    
     document.getElementById('schedule-modal-overlay').style.display = 'flex';
     window.SELECTED_SCHEDULE_PAIR_ID = pairId;
     window.SELECTED_PARTNER_NAME = name;
@@ -1267,11 +1273,18 @@ window.submitSchedule = async () => {
     const btn = document.getElementById('final-schedule-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Scheduling...'; }
 
+    const includeMentor = document.getElementById('schedule-include-mentor')?.checked !== false;
+
     try {
         const res = await fetch(`${API_BASE}/api/sessions/schedule`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${BarsSession.get().token}` },
-            body: JSON.stringify({ pair_id: window.SELECTED_SCHEDULE_PAIR_ID, start_time: `${window.SELECTED_DATE}T${time}`, link: link || '' })
+            body: JSON.stringify({ 
+                pair_id: window.SELECTED_SCHEDULE_PAIR_ID, 
+                start_time: `${window.SELECTED_DATE}T${time}`, 
+                link: link || '',
+                include_mentor: includeMentor
+            })
         });
         if (res.ok) {
             window.closeScheduleModal();
@@ -1298,9 +1311,15 @@ window.setSessionFilter = function (f) {
 };
 
 window.renderSessions = function (sessions) {
+    const user = BarsSession.get()?.user;
+    if (!user) return;
+    const isCounselor = !!user.isCounselor || !!user.is_counselor;
+    
+    const schedBtn = document.getElementById('btn-show-schedule-master');
+    if (schedBtn) schedBtn.style.display = isCounselor ? 'none' : 'block';
+
     const list = document.getElementById('sessions-list-container');
     if (!list) return;
-    const user = BarsSession.get()?.user;
     const isMentee = user?.role === 'Mentee';
     const filter = window.CURRENT_SESSION_FILTER || 'Upcoming';
 

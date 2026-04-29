@@ -223,7 +223,9 @@ def handle_dashboard():
         elif role == 'Mentee':
             sessions_filtered = [s for s in sessions_raw if (safe_get(s, ['mentee_email', 'menteeEmail']) or "").lower().strip() == u_email]
         elif is_counselor:
-            sessions_filtered = sessions_raw
+            # Rule: Counselors ONLY see sessions scheduled by counselors (Private from Mentor/Mentee-only chats)
+            # Or sessions explicitly marked as counselor-led.
+            sessions_filtered = [s for s in sessions_raw if ('@bars.ae' in str(s.get('notes','')) or '@naischool.ae' not in str(s.get('notes','')))]
         else: # Regular staff: hide counselor sessions
             sessions_filtered = [s for s in sessions_raw if '[SCHEDULER:admin@bars.ae]' not in str(s.get('notes',''))]
 
@@ -699,8 +701,12 @@ def handle_session_schedule():
         m_e = safe_get(pair, ['mentor_email', 'mentorEmail'])
         s_e = safe_get(pair, ['mentee_email', 'menteeEmail'])
         
-        if not m_e or not s_e:
-            return jsonify({"error": "Could not resolve mentor/mentee emails from pairing"}), 400
+        # Rule: If counselor schedules and "include_mentor" is false, remove mentor email
+        if not data.get('include_mentor', True):
+            m_e = None
+
+        if not s_e:
+            return jsonify({"error": "Could not resolve mentee email from pairing"}), 400
 
         # Polymorphic Insert Strategy
         success = False; err_msg = ""
