@@ -298,7 +298,11 @@ def handle_login():
                 if r.data:
                     db_pass = safe_get(r.data[0], ['password'])
                     if not db_pass: db_pass = PASSWORD_MAP.get(e)
-                    if db_pass == p: resp = r; break
+                    if db_pass == p:
+                        # Rule: No one can login with a default password. Must activate first.
+                        if p in ['bars', 'PENDING_ACTIVATION', '']:
+                            return jsonify({"error": "Account not activated. Please use the Registration/Activation flow to set your own password."}), 403
+                        resp = r; break
                     else: continue
             except: continue
         if resp and resp.data:
@@ -423,7 +427,8 @@ def handle_verify_staff():
         except: continue
     if resp and resp.data:
         r = resp.data[0]; db_pass = safe_get(r, ['password']) or PASSWORD_MAP.get(e)
-        is_active = db_pass is not None and db_pass.strip() not in ['PENDING_ACTIVATION', '']
+        # Rule: Treat 'bars' as unactivated to force staff to set their own password
+        is_active = db_pass is not None and db_pass.strip() not in ['PENDING_ACTIVATION', 'bars', '']
         return jsonify({"success": True, "full_name": safe_get(r, ['full_name', 'name']), "is_activated": is_active})
     return jsonify({"error": "Staff not found"}), 404
 
