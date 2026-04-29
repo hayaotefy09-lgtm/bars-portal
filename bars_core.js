@@ -1489,9 +1489,8 @@ window.renderMentors = (mentors, targetId) => {
                 <div style="display: flex; align-items: center; gap: 1.25rem;">
                     <div style="background: linear-gradient(135deg, #FFD700 0%, #DAA520 100%); color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem; flex-shrink: 0;">${m.name.charAt(0)}${m.name.split(' ').length > 1 ? m.name.split(' ')[1].charAt(0) : ''}</div>
                     <div>
-                        <div style="font-weight: 800; color: #1e293b; font-size: 1.05rem; line-height: 1.2; display:flex; align-items:center; gap:0.5rem;">
+                        <div style="font-weight: 800; color: #1e293b; font-size: 1.05rem; line-height: 1.2;">
                             ${m.name}
-                            <span style="font-size:0.55rem; padding:0.2rem 0.5rem; border-radius:6px; background:${statusColor}15; color:${statusColor}; text-transform:uppercase; letter-spacing:0.5px;">${m.status || 'Available'}</span>
                         </div>
                         <div style="font-size: 0.75rem; color: #64748b; font-weight: 600; margin-top: 0.15rem;">${m.email}</div>
                         <div style="font-size: 0.8rem; color: #D4AF37; font-weight: 700; margin-top: 0.15rem; text-decoration: none;">View Profile</div>
