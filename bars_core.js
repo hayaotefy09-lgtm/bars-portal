@@ -1258,7 +1258,7 @@ window.submitSchedule = async () => {
         const res = await fetch(`${API_BASE}/api/sessions/schedule`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${BarsSession.get().token}` },
-            body: JSON.stringify({ pair_id: window.SELECTED_PAIR_ID, start_time: `${window.SELECTED_DATE}T${time}`, link: link || '' })
+            body: JSON.stringify({ pair_id: window.SELECTED_SCHEDULE_PAIR_ID, start_time: `${window.SELECTED_DATE}T${time}`, link: link || '' })
         });
         if (res.ok) {
             window.closeScheduleModal();
