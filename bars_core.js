@@ -1383,6 +1383,13 @@ window.renderSessions = function (sessions) {
 
 window.SURVEY_CLICKS = {};
 window.unlockSessionJoin = function (sessionId) {
+    const user = BarsSession.get()?.user;
+    const surveys = window.DASH_DATA?.profile?.surveys || {};
+    let link = "#";
+    if (user?.role === 'Mentee') link = surveys.mentee_pre || "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw_2BXp3VMmxMiX9DbxtNcF1UNFFERFlFRTBSNUEwQ0pWT1NDWlhBRUFPMC4u";
+    else link = surveys.mentor_during || "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw_2BXp3VMmxMiX9DbxtNcF1UMERGNVk0SkY4RkY4RTRMS1E2SU85MVhVSC4u";
+    
+    window.open(link, '_blank');
     window.SURVEY_CLICKS[sessionId] = true;
     window.renderSessions(window.DASH_DATA.sessions); // Re-render to unlock
 };
