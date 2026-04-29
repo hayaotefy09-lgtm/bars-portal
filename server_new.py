@@ -64,13 +64,38 @@ def load_local_auth():
     except Exception as e:
         print(f"[AUTH ERROR]: Could not load local auth: {str(e)}")
 
+import base64
+
 def get_user_from_headers():
     if request.headers.get('X-Admin-Bypass') == 'BARS2026':
         return {"email": "admin@bars.ae", "role": "ProgramStaff", "name": "System Admin", "isCounselor": True}
+    
     auth = request.headers.get('Authorization')
     if auth and auth.startswith('Bearer '):
         token = auth.split(' ')[1]
-        if token in SESSION_STORE: return SESSION_STORE[token]
+        if token in SESSION_STORE: 
+            return SESSION_STORE[token]
+        
+        # Session Auto-Recovery: Survive restarts by decoding email from token
+        try:
+            if "." in token:
+                encoded_email = token.split(".")[0]
+                email = base64.b64decode(encoded_email).decode('utf-8')
+                print(f"[AUTH]: Recovering session for {email}")
+                
+                # Re-fetch user to re-hydrate memory
+                res = supabase_admin.table('Registry').select('*').eq('email', email).execute()
+                if res.data and len(res.data) > 0:
+                    r = res.data[0]
+                    # Map exactly as in login
+                    fn = safe_get(r, ['full_name', 'name']) or f"{safe_get(r, ['first_name', 'firstName'], '')} {safe_get(r, ['last_name', 'lastName'], '')}".strip() or "User"
+                    parts = fn.split(' ', 1); f_name = parts[0] if len(parts) > 0 else fn; l_name = parts[1] if len(parts) > 1 else ""
+                    user = {"email": email, "role": safe_get(r, ['role', 'user_role']), "name": fn, "first_name": f_name, "last_name": l_name, "isCounselor": (normalize_role(safe_get(r, ['role'])) == 'ProgramStaff'), "Gender": safe_get(r, ['Gender', 'gender'])}
+                    SESSION_STORE[token] = user
+                    return user
+        except Exception as e:
+            print(f"[AUTH ERROR]: Recovery failed: {str(e)}")
+            
     return None
 
 def safe_get(obj, keys, default=None):
@@ -274,8 +299,12 @@ def handle_login():
             fn = safe_get(r, ['full_name', 'name']) or f"{safe_get(r, ['first_name', 'firstName'], '')} {safe_get(r, ['last_name', 'lastName'], '')}".strip() or "User"
             parts = fn.split(' ', 1); f_name = parts[0] if len(parts) > 0 else fn; l_name = parts[1] if len(parts) > 1 else ""
             user = {"email": e, "role": safe_get(r, ['role', 'user_role']), "name": fn, "first_name": f_name, "last_name": l_name, "isCounselor": (normalize_role(safe_get(r, ['role'])) == 'ProgramStaff'), "Gender": safe_get(r, ['Gender', 'gender'])}
-            token = str(uuid.uuid4()); SESSION_STORE[token] = user
-            save_sessions()
+            # Resilient Token: base64(email).uuid
+            resilient_id = base64.b64encode(e.encode('utf-8')).decode('utf-8')
+            token = f"{resilient_id}.{str(uuid.uuid4())}"
+            
+            SESSION_STORE[token] = user
+            save_sessions() # Authoritative Save
             return jsonify({"success": True, "token": token, "user": user})
         return jsonify({"error": "Invalid credentials"}), 401
     except Exception as e: return jsonify({"error": f"Login Error: {str(e)}"}), 500
