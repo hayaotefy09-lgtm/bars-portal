@@ -679,26 +679,44 @@ def handle_session_schedule():
         
         if not pair: return jsonify({"error": f"Pairing not found for ID: {pid}"}), 404
         
-        m_e = pair.get('mentor_email')
-        s_e = pair.get('mentee_email')
+        # Resolve emails using safe_get (Schema Bridge)
+        m_e = safe_get(pair, ['mentor_email', 'mentorEmail'])
+        s_e = safe_get(pair, ['mentee_email', 'menteeEmail'])
         
-        session_data = {
-            "mentor_email": m_e, "mentee_email": s_e,
-            "session_date": start, 
-            "notes": f"[SCHEDULER:{u['email']}] {link or ''}", 
-            "status": "Scheduled"
-        }
-        
+        if not m_e or not s_e:
+            return jsonify({"error": "Could not resolve mentor/mentee emails from pairing"}), 400
+
+        # Polymorphic Insert Strategy
         success = False; err_msg = ""
         for table in ['sessions', 'Sessions', 'Events']:
+            # Payload variant 1: Snake Case
             try:
-                supabase_admin.table(table).insert(session_data).execute()
+                supabase_admin.table(table).insert({
+                    "mentor_email": m_e, "mentee_email": s_e,
+                    "session_date": start, 
+                    "notes": f"[SCHEDULER:{u['email']}] {link or ''}", 
+                    "status": "Scheduled"
+                }).execute()
                 success = True; break
-            except Exception as e: err_msg = str(e); continue
+            except:
+                # Payload variant 2: Camel Case
+                try:
+                    supabase_admin.table(table).insert({
+                        "mentorEmail": m_e, "menteeEmail": s_e,
+                        "session_date": start, 
+                        "notes": f"[SCHEDULER:{u['email']}] {link or ''}", 
+                        "status": "Scheduled"
+                    }).execute()
+                    success = True; break
+                except Exception as e:
+                    err_msg = str(e)
+                    continue
             
         if success: return jsonify({"success": True})
         return jsonify({"error": f"Database error: {err_msg}"}), 500
-    except Exception as e: return jsonify({"error": str(e)}), 500
+    except Exception as e: 
+        print(f"[SCHEDULER ERROR]: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/sessions/delete', methods=['POST'])
 def handle_session_delete():
