@@ -1861,3 +1861,50 @@ window.submitWhiteboard = async function() {
         }
     } catch (e) { alert("❌ Connectivity Error: " + e.message); }
 };
+
+// 9. Post-Session Watchdog (Auto-Trigger)
+window.NOTIFIED_SESSIONS = {};
+window.SESSION_WATCHDOG = setInterval(() => {
+    const data = window.DASH_DATA;
+    const user = BarsSession.get()?.user;
+    if (!data?.sessions || !user) return;
+
+    const now = new Date().getTime();
+    data.sessions.forEach(s => {
+        if (!s.start_time || window.NOTIFIED_SESSIONS[s.id]) return;
+        
+        const startTime = new Date(s.start_time).getTime();
+        const diffMinutes = (now - startTime) / (1000 * 60);
+
+        // Trigger alert exactly 40 minutes after start (Active for 30 min window)
+        if (diffMinutes >= 40 && diffMinutes < 70) {
+            window.showSurveyAlert(s, user.role);
+            window.NOTIFIED_SESSIONS[s.id] = true;
+        }
+    });
+}, 30000); // Check every 30s
+
+window.showSurveyAlert = (session, role) => {
+    const surveys = window.DASH_DATA?.profile?.surveys || {};
+    let link = "#";
+    if (role === 'Mentee') link = surveys.mentee_post || "https://forms.office.com/r/mentee-post";
+    else if (role === 'Mentor') link = surveys.mentor_post || "https://forms.office.com/r/mentor-post";
+
+    const alertHtml = `
+        <div id="survey-alert-${session.id}" class="survey-alert-slide" style="position: fixed; bottom: 2rem; right: 2rem; background: #fff1f2; border: 2px solid #ef4444; border-radius: 20px; padding: 1.5rem; width: 320px; box-shadow: 0 15px 40px rgba(239, 68, 68, 0.15); z-index: 100000; display: flex; flex-direction: column; gap: 1rem; animation: slideIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="background: #ef4444; color: white; padding: 0.3rem 0.6rem; border-radius: 6px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase;">Session Ending Soon</span>
+                <button onclick="this.parentElement.parentElement.remove()" style="border:none; background:transparent; font-size:1.2rem; cursor:pointer; color:#9ca3af;">✕</button>
+            </div>
+            <div style="font-weight: 800; color: #1e293b; font-size: 0.95rem;">Please complete your Post-Session Survey now.</div>
+            <a href="${link}" target="_blank" onclick="this.parentElement.remove()" style="background: #D4AF37; color: white; text-align: center; padding: 0.8rem; border-radius: 12px; font-weight: 800; text-decoration: none; font-size: 0.9rem;">1. Complete Survey</a>
+        </div>
+        <style>
+            @keyframes slideIn { from { transform: translateX(120%); } to { transform: translateX(0); } }
+            .survey-alert-slide { transition: all 0.3s; }
+        </style>
+    `;
+    const div = document.createElement('div');
+    div.innerHTML = alertHtml;
+    document.body.appendChild(div);
+};
