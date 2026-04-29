@@ -485,6 +485,7 @@ def handle_whiteboard():
                     except: continue
             if success: return jsonify({"success": True})
             return jsonify({"error": "Database link failed."}), 400
+    except Exception as e: return jsonify({"error": str(e)}), 500
 
 @app.route('/api/survey/analytics', methods=['GET'])
 def handle_survey_analytics():
