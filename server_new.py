@@ -29,7 +29,25 @@ SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', "eyJhbGciOiJI
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
+SESSION_STORE_PATH = 'sessions.json'
 SESSION_STORE = {}
+
+def save_sessions():
+    try:
+        with open(SESSION_STORE_PATH, 'w') as f:
+            json.dump(SESSION_STORE, f)
+    except: pass
+
+def load_sessions():
+    global SESSION_STORE
+    try:
+        if os.path.exists(SESSION_STORE_PATH):
+            with open(SESSION_STORE_PATH, 'r') as f:
+                SESSION_STORE = json.load(f)
+    except: SESSION_STORE = {}
+
+load_sessions()
+
 PASSWORD_MAP = {} # Virtual Auth Engine Fallback
 
 def load_local_auth():
@@ -244,6 +262,7 @@ def handle_login():
             parts = fn.split(' ', 1); f_name = parts[0] if len(parts) > 0 else fn; l_name = parts[1] if len(parts) > 1 else ""
             user = {"email": e, "role": safe_get(r, ['role', 'user_role']), "name": fn, "first_name": f_name, "last_name": l_name, "isCounselor": (normalize_role(safe_get(r, ['role'])) == 'ProgramStaff'), "Gender": safe_get(r, ['Gender', 'gender'])}
             token = str(uuid.uuid4()); SESSION_STORE[token] = user
+            save_sessions()
             return jsonify({"success": True, "token": token, "user": user})
         return jsonify({"error": "Invalid credentials"}), 401
     except Exception as e: return jsonify({"error": f"Login Error: {str(e)}"}), 500
