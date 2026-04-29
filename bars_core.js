@@ -27,6 +27,11 @@ const BarsSession = {
     }
 };
 window.BarsSession = BarsSession;
+// Guest Access
+window.continueAsGuest = function() {
+    BarsSession.save("VISITOR_TOKEN", { email: "visitor@bars.ae", role: "Visitor", name: "Guest Visitor" });
+    window.showAuthForm('dash');
+};
 
 // 2. Navigation
 window.showAuthForm = function (id) {
@@ -428,9 +433,10 @@ async function initDashboard() {
         document.body.classList.toggle('counselor-theme', isCounselor);
 
         // Fetch Live Dashboard Data
-        const res = await fetch(`${API_BASE}/api/dashboard`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const headers = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        
+        const res = await fetch(`${API_BASE}/api/dashboard`, { headers });
         if (!res.ok) throw new Error("Database synchronization failed.");
 
         const data = await res.json();
@@ -445,8 +451,8 @@ async function initDashboard() {
         // Populate Sidebar
         const items = [
             { id: 'dashboard', label: 'Dashboard' },
-            { id: 'messages', label: 'Messages', hideForStaffOnly: true },
-            { id: 'survey', label: 'Survey Center', hideForMentees: true },
+            { id: 'messages', label: 'Messages', hideForStaffOnly: true, hideForVisitors: true },
+            { id: 'survey', label: 'Survey Center', hideForMentees: true, hideForStaffOnly: true, hideForVisitors: true },
             { id: 'sessions', label: 'My Sessions', hideForStaffOnly: true, hideForVisitors: true },
             { id: 'resources', label: 'Library' },
             { id: 'whiteboard', label: 'Whiteboard', hideForMentees: true, hideForVisitors: true },
@@ -631,12 +637,12 @@ window.switchSurveyView = function (view) {
     if (user?.role === 'Mentor' && view === 'trends') return;
     document.getElementById('survey-list-view').style.display = (view === 'list' ? 'block' : 'none');
     document.getElementById('survey-analytics-view').style.display = (view === 'trends' ? 'block' : 'none');
-    document.getElementById('toggle-list')?.classList.toggle('active', view === 'list');
+document.getElementById('toggle-list')?.classList.toggle('active', view === 'list');
     document.getElementById('toggle-trends')?.classList.toggle('active', view === 'trends');
     if (view === 'trends') window.renderSurveyTrends();
 };
 
-window.renderSurveyCenter = async function () {
+window.renderSurveyCenter = async function() {
     const user = BarsSession.get()?.user;
     if (!user) return;
     const isCounselor = user.isCounselor || (user.role === 'ProgramStaff' && ['admin@bars.ae', 'counselor@bars.ae'].includes(user.email));
@@ -1338,8 +1344,8 @@ window.renderSessions = function (sessions) {
         const isScheduler = s.scheduled_by === user.email;
         const isCounselor = !!user.isCounselor || !!user.is_counselor;
         
-        // Trash shows only for the person who scheduled
-        const canTrash = isScheduler || (isCounselor && !s.scheduled_by);
+        // Trash shows only for the person who scheduled (Strict Rule)
+        const canTrash = isScheduler;
 
         const timeStr = new Date(s.start_time).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true, month: 'short', day: 'numeric', year: 'numeric' });
         const isStaff = user.role === 'ProgramStaff' || !!user.isCounselor || !!user.is_counselor;

@@ -151,7 +151,10 @@ def initial_data():
 def handle_dashboard():
     try:
         u = get_user_from_headers()
-        if not u: return jsonify({"error": "Auth Required"}), 401
+        # Visitor mode enabled: u is None. 
+        # Rule: Anyone can access the dashboard in 'Visitor' mode if no token is provided.
+        role = normalize_role(u['role']) if u else 'Visitor'
+        is_counselor = (u.get('isCounselor') or (u['role'] == 'ProgramStaff' and u['email'] in ['admin@bars.ae', 'counselor@bars.ae'])) if u else False
         
         # 1. Fetch Cloud Data
         users_data = safe_fetch(['users_bars', 'users', 'Registry'])
@@ -203,17 +206,19 @@ def handle_dashboard():
                 }
                 
                 # Add parity fields for Student View
-                if role == 'Mentor' and u['email'] == m_e:
+                if role == 'Mentor' and u and u['email'] == m_e:
                     pair_obj.update({"name": fn_s, "email": s_e, "type": "Mentee"})
-                elif role == 'Mentee' and u['email'] == s_e:
+                elif role == 'Mentee' and u and u['email'] == s_e:
                     pair_obj.update({"name": fn_m, "email": m_e, "type": "Mentor"})
                 
                 res["pairs"].append(pair_obj)
 
         # 5. Process & Normalize Sessions
-        u_email = u['email'].lower().strip()
+        u_email = u['email'].lower().strip() if u else ""
         sessions_filtered = []
-        if role == 'Mentor':
+        if role == 'Visitor':
+            sessions_filtered = [] # Visitors see NO sessions
+        elif role == 'Mentor':
             sessions_filtered = [s for s in sessions_raw if (safe_get(s, ['mentor_email', 'mentorEmail']) or "").lower().strip() == u_email]
         elif role == 'Mentee':
             sessions_filtered = [s for s in sessions_raw if (safe_get(s, ['mentee_email', 'menteeEmail']) or "").lower().strip() == u_email]
@@ -237,7 +242,7 @@ def handle_dashboard():
             
             # Partner Resolution
             partner_name = "Partner"
-            p_email = s_e if u['email'] == m_e else (m_e if u['email'] == s_e else None)
+            p_email = s_e if (u and u['email'] == m_e) else (m_e if (u and u['email'] == s_e) else None)
             if p_email:
                 p_u = users_map.get(p_email, {})
                 partner_name, _, _ = format_user_name(p_u)
@@ -262,16 +267,16 @@ def handle_dashboard():
         res["messages"] = messages_data
 
         # 6. Profile & Surveys
-        gender = str(safe_get(u, ['Gender', 'gender'], '')).strip().replace("'", "")
+        gender = str(safe_get(u, ['Gender', 'gender'], '')).strip().replace("'", "") if u else ""
         survey_links = {
             "mentee_pre": "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw_2BXp3VMmxMiX9DbxtNcF1UNFFERFlFRTBSNUEwQ0pWT1NDWlhBRUFPMC4u",
             "mentee_post": "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw_2BXp3VMmxMiX9DbxtNcF1UMERGNVk0SkY4RkY4RTRMS1E2SU85MVhVSC4u",
             "mentor_post": "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw5ArmNjQOFNPtxHCG2-Ep6dURVE1WEo3TUFORjg0N0NNWTVNTTNYUDdGNS4u",
             "mentor_during": "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw5ArmNjQOFNPtxHCG2-Ep6dUNUtZTEEyTU9VNVMyMEoxTjBTQk1KTlVaUC4u"
         }
-        fn_u, f_u, l_u = format_user_name(u)
+        fn_u, f_u, l_u = format_user_name(u) if u else ("Visitor", "Visitor", "")
         res["profile"] = {
-            "name": fn_u, "first_name": f_u, "last_name": l_u, "email": u['email'], 
+            "name": fn_u, "first_name": f_u, "last_name": l_u, "email": u['email'] if u else "visitor@bars.ae", 
             "role": role, "isCounselor": is_counselor, "gender": gender, "surveys": survey_links
         }
         
@@ -478,9 +483,20 @@ def handle_whiteboard():
                     except: continue
             if success: return jsonify({"success": True})
             return jsonify({"error": "Database link failed."}), 400
-    except Exception as e: return jsonify({"error": str(e)}), 500
 
+@app.route('/api/survey/analytics', methods=['GET'])
+def handle_survey_analytics():
+    u = get_user_from_headers()
+    if not u: return jsonify({"error": "Auth Required"}), 401
     try:
+        role = normalize_role(u['role'])
+        is_c = u.get('isCounselor') or (u['role'] == 'ProgramStaff' and u['email'] in ['admin@bars.ae', 'counselor@bars.ae'])
+        
+        # Rule: Program Staff (non-counselor) cannot see survey responses
+        if role == 'ProgramStaff' and not is_c: return jsonify({"error": "Unauthorized"}), 403
+        # Rule: Mentees have no access to survey center
+        if role == 'Mentee': return jsonify({"error": "Unauthorized"}), 403
+
         # Use survey_responses_bars which has role-based data
         resp = supabase_admin.table('survey_responses_bars').select('*').execute()
         raw_data = resp.data or []
