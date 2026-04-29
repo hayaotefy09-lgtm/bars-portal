@@ -6,7 +6,7 @@ url = "https://cojvbregrwqgnzscmmub.supabase.co"
 key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvanZicmVncndxZ256c2NtbXViIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjkyNjE0MiwiZXhwIjoyMDkyNTAyMTQyfQ.eRgflZH9Qy2EXIVkIAN0xd5tFf9mO2pM-Iqr8IFnv7s"
 supabase = create_client(url, key)
 
-email = "514511@naischool.ae"
+email = "testmentor@naischool.ae"
 for table in ['users', 'profiles', 'Registry']:
     try:
         r = supabase.table(table).select('*').eq('email', email).execute()
