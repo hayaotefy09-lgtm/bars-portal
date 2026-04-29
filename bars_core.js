@@ -1302,23 +1302,28 @@ window.renderSessions = function (sessions) {
     if (menteeLinks) menteeLinks.style.display = isMentee ? 'block' : 'none';
 
     if (isMentee && window.DASH_DATA?.profile?.surveys) {
-        const surveys = window.DASH_DATA?.profile?.surveys || {};
-        const backupBox = document.getElementById('mentee-backup-surveys');
-        if (backupBox) {
-            const isMentor = user?.role === 'Mentor';
-            backupBox.style.display = (isMentee || isMentor) ? 'block' : 'none';
-            
-            const linkPre = document.getElementById('link-mentee-pre');
-            const linkPost = document.getElementById('link-mentee-post');
-            
-            if (isMentee) {
-                if (linkPre) { linkPre.href = surveys.mentee_pre || '#'; linkPre.textContent = 'Pre-Session Survey'; }
-                if (linkPost) { linkPost.href = surveys.mentee_post || '#'; linkPost.textContent = 'Post-Session Survey'; }
-            } else if (isMentor) {
-                if (linkPre) { linkPre.href = surveys.mentor_during || '#'; linkPre.textContent = 'During-Session Survey'; }
-                if (linkPost) { linkPost.href = surveys.mentor_post || '#'; linkPost.textContent = 'Post-Session Survey'; }
+            const surveys = window.DASH_DATA?.profile?.surveys || {};
+            const backupBox = document.getElementById('mentee-backup-surveys');
+            if (backupBox) {
+                const isMentor = user?.role === 'Mentor';
+                backupBox.style.display = (isMentee || isMentor) ? 'block' : 'none';
+                
+                const linkPre = document.getElementById('link-mentee-pre');
+                const linkPost = document.getElementById('link-mentee-post');
+                
+                const M_PRE = "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw_2BXp3VMmxMiX9DbxtNcF1UNFFERFlFRTBSNUEwQ0pWT1NDWlhBRUFPMC4u";
+                const M_POST = "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw_2BXp3VMmxMiX9DbxtNcF1UMERGNVk0SkY4RkY4RTRMS1E2SU85MVhVSC4u";
+                const T_DURING = "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw_2BXp3VMmxMiX9DbxtNcF1UMERGNVk0SkY4RkY4RTRMS1E2SU85MVhVSC4u";
+                const T_POST = "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw_2BXp3VMmxMiX9DbxtNcF1UQjcyWjJDQUwxNTE3TEZNRDhVSzlZNEZJMS4u";
+
+                if (isMentee) {
+                    if (linkPre) { linkPre.href = surveys.mentee_pre || M_PRE; linkPre.textContent = 'PRE-SESSION SURVEY'; }
+                    if (linkPost) { linkPost.href = surveys.mentee_post || M_POST; linkPost.textContent = 'POST-SESSION SURVEY'; }
+                } else if (isMentor) {
+                    if (linkPre) { linkPre.href = surveys.mentor_during || T_DURING; linkPre.textContent = 'DURING-SESSION SURVEY'; }
+                    if (linkPost) { linkPost.href = surveys.mentor_post || T_POST; linkPost.textContent = 'POST-SESSION SURVEY'; }
+                }
             }
-        }
     }
 
     const now = new Date().getTime();
@@ -1343,7 +1348,7 @@ window.renderSessions = function (sessions) {
         const hasClickedPre = window.SURVEY_CLICKS?.[s.id] || false;
         const lockNote = !hasClickedPre && s.meeting_link ? `<div style="font-size:0.7rem; color:#ef4444; font-weight:700; margin-top:0.3rem;">⚠️ Fill survey to unlock link</div>` : '';
 
-        const preSurveyBtn = `<button onclick="window.unlockSessionJoin('${s.id}')" class="btn-black-gold" style="padding:0.7rem 1.2rem; border-radius:12px; font-size:0.85rem;">1. Survey</button>`;
+        const preSurveyBtn = `<button onclick="window.unlockSessionJoin('${s.id}')" class="btn-black-gold" style="padding:0.7rem 1.2rem; border-radius:12px; font-size:0.85rem; cursor:pointer;">1. SURVEY</button>`;
         
         let linkActionHtml = '';
         if (s.meeting_link) {
@@ -1385,13 +1390,18 @@ window.SURVEY_CLICKS = {};
 window.unlockSessionJoin = function (sessionId) {
     const user = BarsSession.get()?.user;
     const surveys = window.DASH_DATA?.profile?.surveys || {};
-    let link = "#";
-    if (user?.role === 'Mentee') link = surveys.mentee_pre || "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw_2BXp3VMmxMiX9DbxtNcF1UNFFERFlFRTBSNUEwQ0pWT1NDWlhBRUFPMC4u";
-    else link = surveys.mentor_during || "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw_2BXp3VMmxMiX9DbxtNcF1UMERGNVk0SkY4RkY4RTRMS1E2SU85MVhVSC4u";
     
+    // Auth Fallbacks
+    const M_PRE = "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw_2BXp3VMmxMiX9DbxtNcF1UNFFERFlFRTBSNUEwQ0pWT1NDWlhBRUFPMC4u";
+    const T_DURING = "https://forms.office.com/Pages/ResponsePage.aspx?id=bvV_Bz_K30Cmp2nZVs8Lw_2BXp3VMmxMiX9DbxtNcF1UMERGNVk0SkY4RkY4RTRMS1E2SU85MVhVSC4u";
+
+    let link = (user?.role === 'Mentee') ? (surveys.mentee_pre || M_PRE) : (surveys.mentor_during || T_DURING);
+    
+    console.log("BARS: Unlocking session " + sessionId + " via link: " + link);
     window.open(link, '_blank');
+    
     window.SURVEY_CLICKS[sessionId] = true;
-    window.renderSessions(window.DASH_DATA.sessions); // Re-render to unlock
+    if (window.renderSessions) window.renderSessions(window.DASH_DATA.sessions);
 };
 
 window.renderStaffSessionsSelector = function () {
