@@ -735,7 +735,24 @@ def handle_session_schedule():
         # Resolve emails using safe_get (Schema Bridge)
         m_e = safe_get(pair, ['mentor_email', 'mentorEmail'])
         s_e = safe_get(pair, ['mentee_email', 'menteeEmail'])
-        
+
+        # Rule: Collision Detection & 1-Hour Gap for Mentor
+        if m_e:
+            sessions_raw = safe_fetch(['sessions_bars', 'sessions', 'Sessions'])
+            req_dt = datetime.datetime.fromisoformat(start.replace('Z', ''))
+            for s in sessions_raw:
+                s_m = safe_get(s, ['mentor_email', 'mentorEmail'])
+                if s_m and s_m.lower().strip() == m_e.lower().strip():
+                    s_time = safe_get(s, ['session_date', 'start_time'])
+                    if s_time:
+                        try:
+                            s_dt = datetime.datetime.fromisoformat(s_time.replace('Z', ''))
+                            # Calculate gap in minutes
+                            diff = abs((req_dt - s_dt).total_seconds()) / 60
+                            if diff < 60: # 1-Hour Gap Rule
+                                return jsonify({"error": "Mentor is not available at this time. There must be at least a 1-hour gap between sessions. Please choose a different time."}), 400
+                        except: continue
+
         # Rule: If counselor schedules and "include_mentor" is false, remove mentor email
         if not data.get('include_mentor', True):
             m_e = None
